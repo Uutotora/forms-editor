@@ -161,18 +161,27 @@ export async function getQuestionList(): Promise<QuestionSummary[]> {
   const sheetNames = await getSheetNames();
   const sheets = getSheetsClient();
 
-  // Получаем A7 (title) для всех листов за один batchGet
-  const batchRes = await sheets.spreadsheets.values.batchGet({
+  // includeGridData с ranges=['A7'] (без имени листа) возвращает только ячейку A7
+  // каждого листа — обходит ошибку парсинга для листов с точками в названии
+  const fullRes = await sheets.spreadsheets.get({
     spreadsheetId: SPREADSHEET_ID,
-    ranges: sheetNames.map((name) => `'${name}'!A7`),
-    valueRenderOption: 'FORMATTED_VALUE',
+    includeGridData: true,
+    ranges: ['A7'],
   });
 
-  const valueRanges = batchRes.data.valueRanges ?? [];
-  return sheetNames.map((sheetName, i) => {
-    const title = (valueRanges[i]?.values?.[0]?.[0] as string | undefined) ?? sheetName;
-    return { sheetName, title, hasChanges: false };
-  });
+  const sheetMap = new Map<string, string>();
+  for (const s of fullRes.data.sheets ?? []) {
+    const name = s.properties?.title;
+    if (!name) continue;
+    const title = s.data?.[0]?.rowData?.[0]?.values?.[0]?.formattedValue ?? name;
+    sheetMap.set(name, title as string);
+  }
+
+  return sheetNames.map((sheetName) => ({
+    sheetName,
+    title: sheetMap.get(sheetName) ?? sheetName,
+    hasChanges: false,
+  }));
 }
 
 export async function getQuestion(sheetName: string): Promise<Question | null> {
