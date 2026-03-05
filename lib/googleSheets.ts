@@ -2,7 +2,7 @@ import { google } from 'googleapis';
 import path from 'path';
 import type { Question, QuestionSummary, ControlRow, AnswerRow } from './types';
 
-const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '1OtmTur55DWFNowUAoCnoPrKtjKJRiMDI_HzBRKVRBjE';
+const SPREADSHEET_ID = process.env.GOOGLE_SPREADSHEET_ID || '13VyG08Ehnayw1066USuEvpPe31HBBosXHlcnGbllR6o';
 const CREDENTIALS_PATH = path.join(
   process.cwd(),
   process.env.GOOGLE_CREDENTIALS_PATH || 'data/service-account.json'
