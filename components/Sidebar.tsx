@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useStore } from '@/lib/store';
 import { Search } from 'lucide-react';
@@ -69,17 +69,13 @@ function HighlightedCode({ code, query, isActive }: { code: string; query: strin
 }
 
 export function Sidebar() {
-  const { questions, loadQuestions, isDirty, setPendingNavigation, unsavedQuestions } = useStore();
+  const { questions, isDirty, setPendingNavigation, unsavedQuestions } = useStore();
   const router = useRouter();
   const params = useParams();
   const currentSheet = params?.sheetName
     ? decodeURIComponent(params.sheetName as string)
     : '';
   const [search, setSearch] = useState('');
-
-  useEffect(() => {
-    loadQuestions();
-  }, [loadQuestions]);
 
   const q = search.toLowerCase().trim();
 
