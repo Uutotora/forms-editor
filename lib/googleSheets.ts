@@ -170,35 +170,61 @@ function parseRows(rows: string[][]): Omit<Question, 'sheetName'> {
 export async function getQuestionList(): Promise<QuestionSummary[]> {
   const sheets = getSheetsClient();
 
-  // Один запрос: метаданные + строка A7 для каждого листа.
-  // ranges без имени листа применяется геометрически ко всем листам —
-  // никакого парсинга имён, точки в названиях не ломают запрос.
-  const res = await sheets.spreadsheets.get({
-    spreadsheetId: SPREADSHEET_ID,
-    includeGridData: true,
-    ranges: ['A7:A7'],
-  });
+  // Шаг 1: Получаем метаданные всех листов — имена и sheetId.
+  // Без includeGridData: ответ маленький, все 101 листов гарантированно присутствуют.
+  const metaRes = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
 
-  const result: QuestionSummary[] = [];
-  for (const s of res.data.sheets ?? []) {
-    const sheetName = s.properties?.title;
-    const sheetId = s.properties?.sheetId;
-    if (!sheetName) continue;
+  const allSheetNames: string[] = [];
+  for (const s of metaRes.data.sheets ?? []) {
+    const name = s.properties?.title;
+    const id = s.properties?.sheetId;
+    if (!name) continue;
+    allSheetNames.push(name);
+    if (id != null) _sheetIdCache.set(name, id);
+  }
+  _sheetNamesCache = allSheetNames;
 
-    // Кэшируем sheetId, чтобы не делать лишний getSheetNames() позже
-    if (sheetId != null) _sheetIdCache.set(sheetName, sheetId);
+  if (allSheetNames.length === 0) return [];
 
-    // rowData[0] = строка A7, values[0] = ячейка A (col 0)
-    const title = (s.data?.[0]?.rowData?.[0]?.values?.[0]?.formattedValue as string | undefined | null) ?? sheetName;
-    result.push({ sheetName, title: title || sheetName, hasChanges: false });
+  // Шаг 2: Получаем содержимое A7 (заголовок вопроса) для каждого листа.
+  // Используем spreadsheets.get с qualified ranges ('Имя листа'!A7) —
+  // этот endpoint корректно обрабатывает точки в именах листов,
+  // в отличие от values.get / values.batchGet где dots вызывают "Unable to parse range".
+  let titleMap = new Map<string, string>();
+  try {
+    const titlesRes = await sheets.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID,
+      includeGridData: true,
+      ranges: allSheetNames.map((name) => `'${name}'!A7`),
+    });
+    for (const s of titlesRes.data.sheets ?? []) {
+      const name = s.properties?.title;
+      if (!name) continue;
+      const val = s.data?.[0]?.rowData?.[0]?.values?.[0]?.formattedValue;
+      if (val) titleMap.set(name, val as string);
+    }
+  } catch {
+    // Если qualified ranges тоже сломались — загружаем всё, парсим A7 вручную.
+    // Заодно прогреваем _sheetCache чтобы последующие loadQuestion шли из кэша.
+    const fullRes = await sheets.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID,
+      includeGridData: true,
+    });
+    for (const s of fullRes.data.sheets ?? []) {
+      const name = s.properties?.title;
+      if (!name) continue;
+      const rows = extractRowsFromGridData(s as Parameters<typeof extractRowsFromGridData>[0]);
+      if (!_sheetCache.has(name)) _sheetCache.set(name, rows);
+      const title = rows[6]?.[0];
+      if (title) titleMap.set(name, title);
+    }
   }
 
-  // Синхронизируем _sheetNamesCache из того же ответа
-  if (!_sheetNamesCache) {
-    _sheetNamesCache = result.map((q) => q.sheetName);
-  }
-
-  return result;
+  return allSheetNames.map((sheetName) => ({
+    sheetName,
+    title: titleMap.get(sheetName) || sheetName,
+    hasChanges: false,
+  }));
 }
 
 export async function getQuestion(sheetName: string): Promise<Question | null> {
