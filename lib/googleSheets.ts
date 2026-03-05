@@ -47,12 +47,38 @@ async function getSheetNames(): Promise<string[]> {
 async function getSheetValues(sheetName: string): Promise<string[][]> {
   if (_sheetCache.has(sheetName)) return _sheetCache.get(sheetName)!;
   const sheets = getSheetsClient();
-  const res = await sheets.spreadsheets.values.get({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `'${sheetName}'!A1:J300`,
-    valueRenderOption: 'FORMATTED_VALUE',
-  });
-  const values = (res.data.values ?? []) as string[][];
+  let values: string[][] = [];
+  try {
+    const res = await sheets.spreadsheets.values.get({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${sheetName}'!A1:J300`,
+      valueRenderOption: 'FORMATTED_VALUE',
+    });
+    values = (res.data.values ?? []) as string[][];
+  } catch {
+    // Fallback for sheet names with dots/special chars that confuse the range parser
+    await getSheetNames(); // ensure sheetId is cached
+    const sheetId = _sheetIdCache.get(sheetName);
+    const fullRes = await sheets.spreadsheets.get({
+      spreadsheetId: SPREADSHEET_ID,
+      includeGridData: true,
+    });
+    for (const s of fullRes.data.sheets ?? []) {
+      const name = s.properties?.title;
+      if (!name) continue;
+      if (_sheetCache.has(name)) continue; // don't overwrite existing cache
+      const rows: string[][] = [];
+      for (const gridData of s.data ?? []) {
+        for (const rowData of (gridData.rowData ?? []).slice(0, 300)) {
+          rows.push(
+            (rowData.values ?? []).slice(0, 10).map((c) => (c.formattedValue ?? '').toString())
+          );
+        }
+      }
+      _sheetCache.set(name, rows);
+      if (s.properties?.sheetId === sheetId) values = rows;
+    }
+  }
   _sheetCache.set(sheetName, values);
   return values;
 }

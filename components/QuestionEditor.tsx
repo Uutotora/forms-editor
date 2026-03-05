@@ -263,7 +263,7 @@ export function QuestionEditor() {
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['ID контроля', 'Тип', 'Условия', 'Строгость'].map((h) => (
+                    {['ID контроля', 'Тип контроля', 'Условия контроля', 'Строгость'].map((h) => (
                       <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
                     ))}
                   </tr>
@@ -287,47 +287,80 @@ export function QuestionEditor() {
         {/* Варианты ответов */}
         {q.answers.length > 0 && (
           <CollapsibleSection title="Варианты ответов" count={q.answers.length} flash={savedFlash.answers}>
-            <div className="overflow-x-auto mt-4">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {['№', 'Аббр.', 'Тип', 'Тип варианта', 'Заголовок', 'Подсказка', 'Предуст.', 'Код', 'Переход'].map((h) => (
-                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {q.answers.map((ans, idx) => (
-                    <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      {(['number', 'abbreviation', 'type', 'variantType', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
-                        const isEditable = field === 'headerText' || field === 'hintText';
-                        const isChanged = isEditable && !savedFlash.answers && saved !== null &&
-                          (saved.answers[idx]?.[field] ?? '') !== ans[field];
-                        return (
-                          <td key={field} className="py-2 px-3 first:pl-0">
-                            {isEditable ? (
-                              <input
-                                type="text" value={ans[field]}
-                                onChange={(e) => updateAnswer(idx, field, e.target.value)}
-                                onBlur={commitHistory} placeholder="—"
-                                className={`w-full min-w-[56px] text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
-                                  isChanged
-                                    ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
-                                    : 'border border-transparent bg-gray-50 hover:border-gray-200 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
-                                }`}
-                              />
-                            ) : (
-                              <span className="text-sm text-gray-500 px-2.5 py-1.5 block">
-                                {ans[field] || <span className="text-gray-300">—</span>}
-                              </span>
-                            )}
-                          </td>
-                        );
-                      })}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <div className="mt-4 space-y-3">
+              {q.answers.map((ans, idx) => {
+                const headerChanged = !savedFlash.answers && saved !== null &&
+                  (saved.answers[idx]?.headerText ?? '') !== ans.headerText;
+                const hintChanged = !savedFlash.answers && saved !== null &&
+                  (saved.answers[idx]?.hintText ?? '') !== ans.hintText;
+                return (
+                  <div key={idx} className="rounded-xl border border-gray-100 bg-gray-50 p-4 space-y-3">
+                    {/* Мета-строка: только для просмотра */}
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">№ {ans.number || idx + 1}</span>
+                      {[
+                        { label: 'Аббревиатура', value: ans.abbreviation },
+                        { label: 'Тип ответа', value: ans.type },
+                        { label: 'Тип варианта ответа', value: ans.variantType },
+                        { label: 'Предустановленное значение', value: ans.defaultValue },
+                        { label: 'Код ответа', value: ans.code },
+                        { label: 'Переход на id', value: ans.nextId },
+                      ].map(({ label, value }) => (
+                        <span key={label} className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white border border-gray-200 rounded-full px-2.5 py-0.5">
+                          <span className="text-gray-400">{label}:</span>
+                          <span className="text-gray-700 font-medium">{value || '—'}</span>
+                        </span>
+                      ))}
+                    </div>
+
+                    {/* Редактируемые поля */}
+                    <div className="grid grid-cols-1 gap-2">
+                      <div>
+                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Текст заголовка ответа</p>
+                        <textarea
+                          value={ans.headerText}
+                          onChange={(e) => updateAnswer(idx, 'headerText', e.target.value)}
+                          onBlur={commitHistory}
+                          placeholder="—"
+                          rows={2}
+                          className={`w-full text-sm text-gray-900 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 transition-all resize-none placeholder:text-gray-300 leading-relaxed ${
+                            headerChanged
+                              ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                              : 'border border-transparent bg-white hover:border-gray-200 focus:border-blue-300 focus:ring-blue-100'
+                          }`}
+                        />
+                        {headerChanged && (
+                          <p className="text-xs text-amber-600 mt-1 ml-1 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
+                            Изменено · не сохранено
+                          </p>
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide mb-1">Текст подсказки ответа</p>
+                        <textarea
+                          value={ans.hintText}
+                          onChange={(e) => updateAnswer(idx, 'hintText', e.target.value)}
+                          onBlur={commitHistory}
+                          placeholder="—"
+                          rows={2}
+                          className={`w-full text-sm text-gray-900 rounded-lg px-3 py-2 focus:outline-none focus:ring-2 transition-all resize-none placeholder:text-gray-300 leading-relaxed ${
+                            hintChanged
+                              ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                              : 'border border-transparent bg-white hover:border-gray-200 focus:border-blue-300 focus:ring-blue-100'
+                          }`}
+                        />
+                        {hintChanged && (
+                          <p className="text-xs text-amber-600 mt-1 ml-1 flex items-center gap-1">
+                            <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
+                            Изменено · не сохранено
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </CollapsibleSection>
         )}

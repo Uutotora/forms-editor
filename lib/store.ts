@@ -77,6 +77,12 @@ export const useStore = create<Store>((set, get) => ({
 
   loadQuestion: async (sheetName: string) => {
     const res = await fetch(`/api/question/${encodeURIComponent(sheetName)}`);
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('loadQuestion error:', res.status, text);
+      get().showToast('Ошибка загрузки вопроса', 'error');
+      return;
+    }
     const { question: serverQuestion } = await res.json();
     const { unsavedQuestions } = get();
     const unsaved = unsavedQuestions[sheetName];
