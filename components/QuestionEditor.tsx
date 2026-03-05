@@ -190,6 +190,12 @@ export function QuestionEditor() {
     <div className="flex-1 overflow-y-auto bg-[#F7F8FA]">
       <div className="max-w-3xl mx-auto px-8 py-5 space-y-4">
 
+        {/* Статус утверждения */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <SectionTitle>Статус утверждения</SectionTitle>
+          <ApprovalChips approval={q.approval} savedApproval={saved?.approval} onChange={updateApproval} />
+        </div>
+
         {/* Карточка вопроса */}
         <div className={`bg-white rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
           savedFlash ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
@@ -225,12 +231,6 @@ export function QuestionEditor() {
               );
             })}
           </div>
-        </div>
-
-        {/* Статус утверждения */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <SectionTitle>Статус утверждения</SectionTitle>
-          <ApprovalChips approval={q.approval} savedApproval={saved?.approval} onChange={updateApproval} />
         </div>
 
         {/* Контроли */}
