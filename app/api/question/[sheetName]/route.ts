@@ -20,7 +20,7 @@ export async function PUT(
 ) {
   const { sheetName } = await params;
   const decoded = decodeURIComponent(sheetName);
-  const body = await req.json();
-  await saveQuestion(decoded, body);
+  const current = await req.json();
+  await saveQuestion(decoded, current);
   return NextResponse.json({ success: true });
 }

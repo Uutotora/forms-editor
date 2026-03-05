@@ -11,10 +11,12 @@ const CREDENTIALS_PATH = path.join(
 // ── Кэш ────────────────────────────────────────────────────────────────────
 const _sheetCache = new Map<string, string[][]>();
 let _sheetNamesCache: string[] | null = null;
+const _sheetIdCache = new Map<string, number>();
 
 export function invalidateCache(): void {
   _sheetCache.clear();
   _sheetNamesCache = null;
+  _sheetIdCache.clear();
 }
 
 // ── Auth ────────────────────────────────────────────────────────────────────
@@ -31,7 +33,14 @@ async function getSheetNames(): Promise<string[]> {
   if (_sheetNamesCache) return _sheetNamesCache;
   const sheets = getSheetsClient();
   const meta = await sheets.spreadsheets.get({ spreadsheetId: SPREADSHEET_ID });
-  _sheetNamesCache = (meta.data.sheets || []).map((s) => s.properties?.title ?? '').filter(Boolean);
+  _sheetNamesCache = [];
+  for (const s of meta.data.sheets || []) {
+    const title = s.properties?.title ?? '';
+    if (title) {
+      _sheetNamesCache.push(title);
+      _sheetIdCache.set(title, s.properties?.sheetId ?? 0);
+    }
+  }
   return _sheetNamesCache;
 }
 
@@ -149,66 +158,109 @@ export async function getQuestion(sheetName: string): Promise<Question | null> {
   return { sheetName, ...base };
 }
 
-export async function saveQuestion(sheetName: string, data: Partial<Question>): Promise<void> {
-  const q = data as Question;
+const RED_BG  = { red: 0.957, green: 0.800, blue: 0.800 }; // #F4CCCC
+const GREEN_BG = { red: 0.851, green: 0.918, blue: 0.827 }; // #D9EAD3
+
+export async function saveQuestion(sheetName: string, current: Question): Promise<void> {
   const sheets = getSheetsClient();
 
-  // Фиксированные ячейки
-  await sheets.spreadsheets.values.batchUpdate({
-    spreadsheetId: SPREADSHEET_ID,
-    requestBody: {
-      valueInputOption: 'RAW',
-      data: [
-        { range: `'${sheetName}'!C2`, values: [[q.approval.rosstat]] },
-        { range: `'${sheetName}'!C3`, values: [[q.approval.depr]] },
-        { range: `'${sheetName}'!C4`, values: [[q.approval.ntu]] },
-        { range: `'${sheetName}'!C5`, values: [[q.approval.dit]] },
-        { range: `'${sheetName}'!A7`, values: [[q.title]] },
-        { range: `'${sheetName}'!B9`,  values: [[q.card.id]] },
-        { range: `'${sheetName}'!B10`, values: [[q.card.abbreviation]] },
-        { range: `'${sheetName}'!B11`, values: [[q.card.fillType]] },
-        { range: `'${sheetName}'!B12`, values: [[q.card.precondition]] },
-        { range: `'${sheetName}'!B13`, values: [[q.card.questionText]] },
-        { range: `'${sheetName}'!B14`, values: [[q.card.helpText]] },
-      ],
-    },
-  });
+  // Читаем текущее состояние прямо из кэша (он заполнился при loadQuestion)
+  // Это единственный надёжный источник "до изменений"
+  const savedRows = await getSheetValues(sheetName);
+  const savedState = parseRows(savedRows);
 
-  // Очищаем область контролей и ответов (строки 16–300)
-  await sheets.spreadsheets.values.clear({
-    spreadsheetId: SPREADSHEET_ID,
-    range: `'${sheetName}'!A16:J300`,
-  });
+  await getSheetNames(); // убеждаемся что sheetId закэширован
+  const sheetId = _sheetIdCache.get(sheetName) ?? 0;
 
-  // Строим блок: контроли → заголовок ответов → ответы
-  const tableRows: string[][] = [];
+  const approvalKeys = ['rosstat', 'depr', 'ntu', 'dit'] as const;
+  const approvalRanges = ['C2', 'C3', 'C4', 'C5'];
+  const cardKeys = ['id', 'abbreviation', 'fillType', 'precondition', 'questionText', 'helpText'] as const;
+  const cardRanges = ['B9', 'B10', 'B11', 'B12', 'B13', 'B14'];
 
-  for (const ctrl of q.controls) {
-    // col: 0=id, 1=тип, 2=пусто, 3=условия, 4-7=пусто, 8=строгость
-    const row = ['', '', '', '', '', '', '', '', ''];
-    row[0] = ctrl.id;
-    row[1] = ctrl.type;
-    row[3] = ctrl.conditions;
-    row[8] = ctrl.strictness;
-    tableRows.push(row);
+  // ── 1. Только изменённые фиксированные ячейки ───────────────────────────
+  const valueUpdates: { range: string; values: string[][] }[] = [];
+
+  if (current.title !== savedState.title) {
+    valueUpdates.push({ range: `'${sheetName}'!A7`, values: [[current.title]] });
   }
 
-  // Заголовок таблицы ответов
-  tableRows.push(['№ ответа', 'Аббревиатура ответа', 'Тип ответа', 'Тип варианта ответа', 'Текст заголовка ответа', 'Текст подсказки ответа', 'Предустановленное значение', 'Код ответа', 'Переход на id']);
+  approvalKeys.forEach((key, i) => {
+    if (current.approval[key] !== savedState.approval[key]) {
+      valueUpdates.push({ range: `'${sheetName}'!${approvalRanges[i]}`, values: [[current.approval[key]]] });
+    }
+  });
 
-  for (const ans of q.answers) {
-    tableRows.push([ans.number, ans.abbreviation, ans.type, ans.variantType, ans.headerText, ans.hintText, ans.defaultValue, ans.code, ans.nextId]);
-  }
+  cardKeys.forEach((key, i) => {
+    if (current.card[key] !== savedState.card[key]) {
+      valueUpdates.push({ range: `'${sheetName}'!${cardRanges[i]}`, values: [[current.card[key]]] });
+    }
+  });
 
-  if (tableRows.length > 0) {
-    await sheets.spreadsheets.values.update({
+  if (valueUpdates.length > 0) {
+    await sheets.spreadsheets.values.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A16`,
-      valueInputOption: 'RAW',
-      requestBody: { values: tableRows },
+      requestBody: { valueInputOption: 'RAW', data: valueUpdates },
     });
   }
 
-  // Инвалидируем кэш только этого листа
+  // ── 2. Таблицы контролей и ответов (если изменились) ────────────────────
+  const controlsChanged = JSON.stringify(current.controls) !== JSON.stringify(savedState.controls);
+  const answersChanged  = JSON.stringify(current.answers)  !== JSON.stringify(savedState.answers);
+
+  if (controlsChanged || answersChanged) {
+    await sheets.spreadsheets.values.clear({
+      spreadsheetId: SPREADSHEET_ID,
+      range: `'${sheetName}'!A16:J300`,
+    });
+
+    const tableRows: string[][] = [];
+
+    for (const ctrl of current.controls) {
+      const row = ['', '', '', '', '', '', '', '', ''];
+      row[0] = ctrl.id;
+      row[1] = ctrl.type;
+      row[3] = ctrl.conditions;
+      row[8] = ctrl.strictness;
+      tableRows.push(row);
+    }
+
+    tableRows.push(['№ ответа', 'Аббревиатура ответа', 'Тип ответа', 'Тип варианта ответа', 'Текст заголовка ответа', 'Текст подсказки ответа', 'Предустановленное значение', 'Код ответа', 'Переход на id']);
+
+    for (const ans of current.answers) {
+      tableRows.push([ans.number, ans.abbreviation, ans.type, ans.variantType, ans.headerText, ans.hintText, ans.defaultValue, ans.code, ans.nextId]);
+    }
+
+    if (tableRows.length > 0) {
+      await sheets.spreadsheets.values.update({
+        spreadsheetId: SPREADSHEET_ID,
+        range: `'${sheetName}'!A16`,
+        valueInputOption: 'RAW',
+        requestBody: { values: tableRows },
+      });
+    }
+  }
+
+  // ── 3. Цвет B2:C5 — только для изменившихся строк утверждения ────────────
+  const colorRequests = approvalKeys
+    .filter((key) => current.approval[key] !== savedState.approval[key])
+    .map((key) => {
+      const i = approvalKeys.indexOf(key);
+      return {
+        repeatCell: {
+          range: { sheetId, startRowIndex: i + 1, endRowIndex: i + 2, startColumnIndex: 1, endColumnIndex: 3 },
+          cell: { userEnteredFormat: { backgroundColor: current.approval[key] === 'Да' ? GREEN_BG : RED_BG } },
+          fields: 'userEnteredFormat.backgroundColor',
+        },
+      };
+    });
+
+  if (colorRequests.length > 0) {
+    await sheets.spreadsheets.batchUpdate({
+      spreadsheetId: SPREADSHEET_ID,
+      requestBody: { requests: colorRequests },
+    });
+  }
+
+  // Инвалидируем кэш этого листа — следующий read подтянет свежие данные
   _sheetCache.delete(sheetName);
 }
