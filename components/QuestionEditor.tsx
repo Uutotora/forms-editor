@@ -21,10 +21,8 @@ const CARD_LABELS: Record<string, string> = {
   helpText: 'Текст справки',
 };
 
-const REQUIRED_CARD_FIELDS: Record<string, string> = {
-  id: 'ID вопроса',
-  questionText: 'Текст вопроса',
-};
+// Поля карточки только для просмотра
+const READONLY_CARD_FIELDS = new Set(['id', 'abbreviation', 'fillType', 'precondition']);
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
@@ -36,16 +34,13 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 }
 
 function FieldRow({
-  label, children, required, hasError,
+  label, children,
 }: {
-  label: string; children: React.ReactNode; required?: boolean; hasError?: boolean;
+  label: string; children: React.ReactNode;
 }) {
   return (
     <div className="grid grid-cols-[200px_1fr] gap-4 items-start py-2.5 border-b border-gray-100 last:border-0">
-      <span className={`text-sm pt-1.5 font-medium flex items-center gap-1.5 ${hasError ? 'text-red-500' : 'text-gray-500'}`}>
-        {label}
-        {required && <span className="text-red-400 text-xs leading-none">*</span>}
-      </span>
+      <span className="text-sm pt-1.5 font-medium text-gray-500">{label}</span>
       <div>{children}</div>
     </div>
   );
@@ -135,6 +130,14 @@ function EditableField({
   );
 }
 
+function ReadOnlyField({ value }: { value: string }) {
+  return (
+    <p className="w-full text-sm text-gray-500 rounded-lg px-3 py-2 bg-gray-50 border border-transparent min-h-[36px] leading-relaxed select-text whitespace-pre-wrap">
+      {value || <span className="text-gray-300">—</span>}
+    </p>
+  );
+}
+
 function CollapsibleSection({ title, count, flash = false, children }: { title: string; count: number; flash?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
@@ -164,7 +167,7 @@ function CollapsibleSection({ title, count, flash = false, children }: { title: 
 }
 
 export function QuestionEditor() {
-  const { currentQuestion, savedQuestion, updateQuestion, commitHistory, validationErrors, savedFlash } = useStore();
+  const { currentQuestion, savedQuestion, updateQuestion, commitHistory, savedFlash } = useStore();
 
   if (!currentQuestion) {
     return (
@@ -229,22 +232,24 @@ export function QuestionEditor() {
           </div>
           <div>
             {(Object.keys(CARD_LABELS) as Array<keyof typeof CARD_LABELS>).map((key) => {
-              const isRequired = key in REQUIRED_CARD_FIELDS;
               const label = CARD_LABELS[key];
-              const hasError = isRequired && validationErrors.includes(label);
-              const isChanged = !hasError && !savedFlash.card && saved !== null &&
+              const isReadOnly = READONLY_CARD_FIELDS.has(key);
+              const isChanged = !isReadOnly && !savedFlash.card && saved !== null &&
                 (saved.card[key as keyof typeof saved.card] ?? '') !== (q.card[key as keyof typeof q.card] ?? '');
               return (
-                <FieldRow key={key} label={label} required={isRequired} hasError={hasError}>
-                  <EditableField
-                    value={q.card[key as keyof typeof q.card] || ''}
-                    onChange={(v) => updateCard(key, v)}
-                    onCommit={commitHistory}
-                    multiline={['fillType', 'questionText', 'helpText', 'precondition'].includes(key)}
-                    placeholder={isRequired ? 'Обязательное поле' : '—'}
-                    hasError={hasError}
-                    isChanged={isChanged}
-                  />
+                <FieldRow key={key} label={label}>
+                  {isReadOnly ? (
+                    <ReadOnlyField value={q.card[key as keyof typeof q.card] || ''} />
+                  ) : (
+                    <EditableField
+                      value={q.card[key as keyof typeof q.card] || ''}
+                      onChange={(v) => updateCard(key, v)}
+                      onCommit={commitHistory}
+                      multiline
+                      placeholder="—"
+                      isChanged={isChanged}
+                    />
+                  )}
                 </FieldRow>
               );
             })}
@@ -265,25 +270,12 @@ export function QuestionEditor() {
                 </thead>
                 <tbody>
                   {q.controls.map((ctrl, idx) => (
-                    <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => {
-                        const isChanged = !savedFlash.controls && saved !== null &&
-                          (saved.controls[idx]?.[field] ?? '') !== ctrl[field];
-                        return (
-                          <td key={field} className="py-2 px-3 first:pl-0">
-                            <input
-                              type="text" value={ctrl[field]}
-                              onChange={(e) => updateControl(idx, field, e.target.value)}
-                              onBlur={commitHistory} placeholder="—"
-                              className={`w-full text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
-                                isChanged
-                                  ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
-                                  : 'border border-transparent bg-transparent hover:bg-gray-100 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
-                              }`}
-                            />
-                          </td>
-                        );
-                      })}
+                    <tr key={idx} className="border-b border-gray-50">
+                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => (
+                        <td key={field} className="py-2.5 px-3 first:pl-0 text-sm text-gray-600">
+                          {ctrl[field] || <span className="text-gray-300">—</span>}
+                        </td>
+                      ))}
                     </tr>
                   ))}
                 </tbody>
@@ -308,20 +300,27 @@ export function QuestionEditor() {
                   {q.answers.map((ans, idx) => (
                     <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       {(['number', 'abbreviation', 'type', 'variantType', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
-                        const isChanged = !savedFlash.answers && saved !== null &&
+                        const isEditable = field === 'headerText' || field === 'hintText';
+                        const isChanged = isEditable && !savedFlash.answers && saved !== null &&
                           (saved.answers[idx]?.[field] ?? '') !== ans[field];
                         return (
                           <td key={field} className="py-2 px-3 first:pl-0">
-                            <input
-                              type="text" value={ans[field]}
-                              onChange={(e) => updateAnswer(idx, field, e.target.value)}
-                              onBlur={commitHistory} placeholder="—"
-                              className={`w-full min-w-[56px] text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
-                                isChanged
-                                  ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
-                                  : 'border border-transparent bg-transparent hover:bg-gray-100 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
-                              }`}
-                            />
+                            {isEditable ? (
+                              <input
+                                type="text" value={ans[field]}
+                                onChange={(e) => updateAnswer(idx, field, e.target.value)}
+                                onBlur={commitHistory} placeholder="—"
+                                className={`w-full min-w-[56px] text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
+                                  isChanged
+                                    ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                                    : 'border border-transparent bg-gray-50 hover:border-gray-200 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
+                                }`}
+                              />
+                            ) : (
+                              <span className="text-sm text-gray-500 px-2.5 py-1.5 block">
+                                {ans[field] || <span className="text-gray-300">—</span>}
+                              </span>
+                            )}
                           </td>
                         );
                       })}

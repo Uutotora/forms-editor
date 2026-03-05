@@ -8,19 +8,8 @@ export interface Toast {
   type: 'success' | 'error';
 }
 
-const REQUIRED_FIELDS: { path: string; label: string }[] = [
-  { path: 'card.id', label: 'ID вопроса' },
-  { path: 'card.questionText', label: 'Текст вопроса' },
-];
-
-function validateQuestion(q: Question): string[] {
-  const errors: string[] = [];
-  for (const { path, label } of REQUIRED_FIELDS) {
-    const [section, field] = path.split('.') as ['card', keyof Question['card']];
-    const value = (q[section] as Record<string, string>)[field];
-    if (!value || !value.trim()) errors.push(label);
-  }
-  return errors;
+function validateQuestion(_q: Question): string[] {
+  return [];
 }
 
 function deepEqual(a: unknown, b: unknown): boolean {
