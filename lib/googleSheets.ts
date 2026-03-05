@@ -40,7 +40,7 @@ async function getSheetValues(sheetName: string): Promise<string[][]> {
   const sheets = getSheetsClient();
   const res = await sheets.spreadsheets.values.get({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${sheetName}'!A1:G300`,
+    range: `'${sheetName}'!A1:J300`,
     valueRenderOption: 'FORMATTED_VALUE',
   });
   const values = (res.data.values ?? []) as string[][];
@@ -63,10 +63,10 @@ function parseRows(rows: string[][]): Omit<Question, 'sheetName'> {
   const title = cell(rows, 6, 0);
 
   const approval = {
-    rosstat: cell(rows, 1, 1),
-    depr: cell(rows, 2, 1),
-    ntu: cell(rows, 3, 1),
-    dit: cell(rows, 4, 1),
+    rosstat: cell(rows, 1, 2),
+    depr: cell(rows, 2, 2),
+    ntu: cell(rows, 3, 2),
+    dit: cell(rows, 4, 2),
   };
 
   const card = {
@@ -83,8 +83,8 @@ function parseRows(rows: string[][]): Omit<Question, 'sheetName'> {
   while (r < rows.length) {
     const id = cell(rows, r, 0);
     const type = cell(rows, r, 1);
-    const conditions = cell(rows, r, 2);
-    const strictness = cell(rows, r, 6);
+    const conditions = cell(rows, r, 3);
+    const strictness = cell(rows, r, 8);
     if (!id && !type && !conditions && !strictness) break;
     if (id === '№ ответа' || id === '№') break;
     controls.push({ id, type, conditions, strictness });
@@ -104,14 +104,16 @@ function parseRows(rows: string[][]): Omit<Question, 'sheetName'> {
   if (answersHeaderRow >= 0) {
     for (let i = answersHeaderRow + 1; i < rows.length; i++) {
       const number = cell(rows, i, 0);
-      const type = cell(rows, i, 1);
-      const headerText = cell(rows, i, 2);
-      const hintText = cell(rows, i, 3);
-      const defaultValue = cell(rows, i, 4);
-      const code = cell(rows, i, 5);
-      const nextId = cell(rows, i, 6);
+      const abbreviation = cell(rows, i, 1);
+      const type = cell(rows, i, 2);
+      const variantType = cell(rows, i, 3);
+      const headerText = cell(rows, i, 4);
+      const hintText = cell(rows, i, 5);
+      const defaultValue = cell(rows, i, 6);
+      const code = cell(rows, i, 7);
+      const nextId = cell(rows, i, 8);
       if (!number && !type && !headerText) continue;
-      answers.push({ number, type, headerText, hintText, defaultValue, code, nextId });
+      answers.push({ number, abbreviation, type, variantType, headerText, hintText, defaultValue, code, nextId });
     }
   }
 
@@ -157,10 +159,10 @@ export async function saveQuestion(sheetName: string, data: Partial<Question>): 
     requestBody: {
       valueInputOption: 'RAW',
       data: [
-        { range: `'${sheetName}'!B2`, values: [[q.approval.rosstat]] },
-        { range: `'${sheetName}'!B3`, values: [[q.approval.depr]] },
-        { range: `'${sheetName}'!B4`, values: [[q.approval.ntu]] },
-        { range: `'${sheetName}'!B5`, values: [[q.approval.dit]] },
+        { range: `'${sheetName}'!C2`, values: [[q.approval.rosstat]] },
+        { range: `'${sheetName}'!C3`, values: [[q.approval.depr]] },
+        { range: `'${sheetName}'!C4`, values: [[q.approval.ntu]] },
+        { range: `'${sheetName}'!C5`, values: [[q.approval.dit]] },
         { range: `'${sheetName}'!A7`, values: [[q.title]] },
         { range: `'${sheetName}'!B9`,  values: [[q.card.id]] },
         { range: `'${sheetName}'!B10`, values: [[q.card.abbreviation]] },
@@ -175,26 +177,27 @@ export async function saveQuestion(sheetName: string, data: Partial<Question>): 
   // Очищаем область контролей и ответов (строки 16–300)
   await sheets.spreadsheets.values.clear({
     spreadsheetId: SPREADSHEET_ID,
-    range: `'${sheetName}'!A16:G300`,
+    range: `'${sheetName}'!A16:J300`,
   });
 
   // Строим блок: контроли → заголовок ответов → ответы
   const tableRows: string[][] = [];
 
   for (const ctrl of q.controls) {
-    const row = ['', '', '', '', '', '', ''];
+    // col: 0=id, 1=тип, 2=пусто, 3=условия, 4-7=пусто, 8=строгость
+    const row = ['', '', '', '', '', '', '', '', ''];
     row[0] = ctrl.id;
     row[1] = ctrl.type;
-    row[2] = ctrl.conditions;
-    row[6] = ctrl.strictness;
+    row[3] = ctrl.conditions;
+    row[8] = ctrl.strictness;
     tableRows.push(row);
   }
 
   // Заголовок таблицы ответов
-  tableRows.push(['№ ответа', 'Тип', 'Текст заголовка', 'Текст подсказки', 'Предустановленное значение', 'Код', 'ID следующего вопроса']);
+  tableRows.push(['№ ответа', 'Аббревиатура ответа', 'Тип ответа', 'Тип варианта ответа', 'Текст заголовка ответа', 'Текст подсказки ответа', 'Предустановленное значение', 'Код ответа', 'Переход на id']);
 
   for (const ans of q.answers) {
-    tableRows.push([ans.number, ans.type, ans.headerText, ans.hintText, ans.defaultValue, ans.code, ans.nextId]);
+    tableRows.push([ans.number, ans.abbreviation, ans.type, ans.variantType, ans.headerText, ans.hintText, ans.defaultValue, ans.code, ans.nextId]);
   }
 
   if (tableRows.length > 0) {

@@ -25,7 +25,9 @@ export interface ControlRow {
 
 export interface AnswerRow {
   number: string;
+  abbreviation: string;
   type: string;
+  variantType: string;
   headerText: string;
   hintText: string;
   defaultValue: string;

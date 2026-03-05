@@ -59,14 +59,16 @@ function parseSheet(ws: XLSX.WorkSheet): Omit<Question, 'sheetName'> {
   if (answersHeaderRow >= 0) {
     for (let r = answersHeaderRow + 1; r <= range.e.r; r++) {
       const number = getCellValue(ws, r, 0);
-      const type = getCellValue(ws, r, 1);
-      const headerText = getCellValue(ws, r, 2);
-      const hintText = getCellValue(ws, r, 3);
-      const defaultValue = getCellValue(ws, r, 4);
-      const code = getCellValue(ws, r, 5);
-      const nextId = getCellValue(ws, r, 6);
+      const abbreviation = getCellValue(ws, r, 1);
+      const type = getCellValue(ws, r, 2);
+      const variantType = getCellValue(ws, r, 3);
+      const headerText = getCellValue(ws, r, 4);
+      const hintText = getCellValue(ws, r, 5);
+      const defaultValue = getCellValue(ws, r, 6);
+      const code = getCellValue(ws, r, 7);
+      const nextId = getCellValue(ws, r, 8);
       if (!number && !type && !headerText) continue;
-      answers.push({ number, type, headerText, hintText, defaultValue, code, nextId });
+      answers.push({ number, abbreviation, type, variantType, headerText, hintText, defaultValue, code, nextId });
     }
   }
 

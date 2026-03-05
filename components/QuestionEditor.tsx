@@ -188,7 +188,7 @@ export function QuestionEditor() {
 
   return (
     <div className="flex-1 overflow-y-auto bg-[#F7F8FA]">
-      <div className="max-w-3xl mx-auto px-8 py-5 space-y-4">
+      <div className="px-8 py-5 space-y-4">
 
         {/* Статус утверждения */}
         <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
@@ -281,7 +281,7 @@ export function QuestionEditor() {
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['№', 'Тип', 'Заголовок', 'Подсказка', 'Предуст.', 'Код', 'Переход'].map((h) => (
+                    {['№', 'Аббр.', 'Тип', 'Тип варианта', 'Заголовок', 'Подсказка', 'Предуст.', 'Код', 'Переход'].map((h) => (
                       <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
                     ))}
                   </tr>
@@ -289,7 +289,7 @@ export function QuestionEditor() {
                 <tbody>
                   {q.answers.map((ans, idx) => (
                     <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
-                      {(['number', 'type', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
+                      {(['number', 'abbreviation', 'type', 'variantType', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
                         const isChanged = !savedFlash && saved !== null &&
                           (saved.answers[idx]?.[field] ?? '') !== ans[field];
                         return (
