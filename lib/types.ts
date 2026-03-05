@@ -3,6 +3,7 @@ export interface ApprovalStatus {
   depr: string;
   ntu: string;
   dit: string;
+  [key: string]: string;
 }
 
 export interface CardFields {

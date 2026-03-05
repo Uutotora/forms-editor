@@ -54,8 +54,8 @@ function FieldRow({
 function ApprovalChips({
   approval, savedApproval, onChange,
 }: {
-  approval: Record<string, string>;
-  savedApproval: Record<string, string> | undefined;
+  approval: { [key: string]: string };
+  savedApproval: { [key: string]: string } | undefined;
   onChange: (key: string, value: string) => void;
 }) {
   return (
