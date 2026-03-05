@@ -115,7 +115,7 @@ API падает с ошибкой `Unable to parse range: 'Вопрос 37.4'!A
 
 - **Чтение (`getSheetValues`)**: сначала пробует обычный `values.get`. При ошибке — fallback: `spreadsheets.get` с `includeGridData: true, ranges: ['A1:J300']` (без имени листа — применяется геометрически ко всем листам, парсинга нет). Кэширует все листы из ответа попутно.
 - **Запись (`saveQuestion`)**: использует исключительно `spreadsheets.batchUpdate` с `GridRange` (числовой `sheetId`). Range-строки с именем листа не используются нигде в операциях записи.
-- **Список вопросов (`getQuestionList`)**: `spreadsheets.get` с `ranges: ['A7:A7']` без имён листов — один запрос на все листы.
+- **Список вопросов (`getQuestionList`)**: `spreadsheets.get` с `includeGridData: true` без `ranges` и с `fields`-маской (только `formattedValue`). Один запрос на все листы, работает при любом количестве листов. Попутно прогревает `_sheetCache` — последующие `loadQuestion` отдаются из кэша без обращения к API.
 
 ### Логика saveQuestion
 
@@ -189,7 +189,7 @@ interface QuestionSummary {
 1. **Статус утверждения** — кнопки-чипы Росстат/ДЭПР/НТУ/ДИТ (toggle Да/Нет). Зеленеет при `savedFlash.approval`.
 2. **Карточка вопроса** — поля id, abbreviation, fillType, precondition (read-only серым), questionText, helpText (editable). Зеленеет при `savedFlash.card`.
 3. **Контроли** — коллапсируемый `CollapsibleSection`, таблица только для просмотра. Зеленеет при `savedFlash.controls`.
-4. **Варианты ответов** — коллапсируемый, карточка на каждый ответ: мета-чипы (6 полей read-only) + textarea для `headerText` и `hintText`. Зеленеет при `savedFlash.answers`.
+4. **Варианты ответов** — коллапсируемый, карточка на каждый ответ: мета-чипы (6 полей read-only) + textarea для `headerText` и `hintText`. Зеленеет при `savedFlash.answers`. Чипы "Тип ответа", "Тип варианта ответа", "Переход на id" выделены синей рамкой как ключевые поля.
 
 Поля с изменением относительно `savedQuestion` подсвечиваются жёлтым ("Изменено · не сохранено").
 
