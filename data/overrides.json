@@ -1,0 +1,118 @@
+{
+  "Вопрос 10.6": {
+    "sheetName": "Вопрос 10.6",
+    "title": "Вопрос 10.6. Карточка вопроса",
+    "approval": {
+      "rosstat": "Нет",
+      "depr": "Нет",
+      "ntu": "Нет",
+      "dit": "Нет"
+    },
+    "card": {
+      "id": "",
+      "abbreviation": "",
+      "fillType": "",
+      "precondition": "",
+      "questionText": "",
+      "helpText": ""
+    },
+    "controls": [
+      {
+        "id": "",
+        "type": "",
+        "conditions": "ываыв",
+        "strictness": "ываыв"
+      },
+      {
+        "id": "",
+        "type": "",
+        "conditions": "",
+        "strictness": ""
+      },
+      {
+        "id": "",
+        "type": "",
+        "conditions": "",
+        "strictness": ""
+      }
+    ],
+    "answers": []
+  },
+  "Вопрос 1в": {
+    "sheetName": "Вопрос 1в",
+    "title": "Вопрос 1в. Карточка вопроса",
+    "approval": {
+      "rosstat": "Да",
+      "depr": "Нет",
+      "ntu": "Нет",
+      "dit": "Нет"
+    },
+    "card": {
+      "id": "",
+      "abbreviation": "",
+      "fillType": "",
+      "precondition": "",
+      "questionText": "",
+      "helpText": ""
+    },
+    "controls": [],
+    "answers": []
+  },
+  "Вопрос 1б": {
+    "sheetName": "Вопрос 1б",
+    "title": "Вопрос 1б. Карточка вопроса",
+    "approval": {
+      "rosstat": "Нет",
+      "depr": "Нет",
+      "ntu": "Нет",
+      "dit": "Нет"
+    },
+    "card": {
+      "id": "1",
+      "abbreviation": "",
+      "fillType": "",
+      "precondition": "",
+      "questionText": "",
+      "helpText": ""
+    },
+    "controls": [],
+    "answers": []
+  },
+  "Вопрос 1": {
+    "sheetName": "Вопрос 1",
+    "title": "Вопрос 1. Карточка вопроса",
+    "approval": {
+      "rosstat": "Нет",
+      "depr": "Нет",
+      "ntu": "Нет",
+      "dit": "Нет"
+    },
+    "card": {
+      "id": "2",
+      "abbreviation": "В99",
+      "fillType": "Ответ формируется автоматически:\nПравила автоматического заполнения ответов на вопрос: ответ заполняется на основании порядкового номер анкеты проживающего, созданной на карточке семьи",
+      "precondition": "-",
+      "questionText": "Порядковый номер опрашиваемого лица (в возрасте 15 лет и старше)",
+      "helpText": "-"
+    },
+    "controls": [
+      {
+        "id": "Нет",
+        "type": "Форматно-логический",
+        "conditions": "Ограничить числовой ввод значениями от 1 до 20",
+        "strictness": "Строгий"
+      }
+    ],
+    "answers": [
+      {
+        "number": "1",
+        "type": "Поле ввода",
+        "headerText": "Введите номер",
+        "hintText": "-",
+        "defaultValue": "-",
+        "code": "!_!_!",
+        "nextId": "1а"
+      }
+    ]
+  }
+}

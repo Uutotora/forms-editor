@@ -1,36 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Forms Editor — Редактор вопросов Росстат
 
-## Getting Started
+GUI-интерфейс для редактирования вопросов анкеты Росстат. Предназначен для пользователей, которые не работают с таблицами напрямую.
 
-First, run the development server:
+---
 
-```bash
-npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+## Концепция
+
+**Источник данных** — Google Таблица (Google Sheets). Каждый лист = один вопрос анкеты. Структура листов унифицирована.
+
+**Зачем интерфейс?** Редактировать таблицу вручную неудобно и рискованно — легко сломать структуру. Этот UI позволяет менять поля вопросов через простые формы, а изменения автоматически записываются обратно в таблицу.
+
+**Текущий режим (разработка)** — вместо Google Sheets используется локальный файл `data/questions.xlsx`. API синхронизации (`/api/sync`) — заглушка. После подключения Google Sheets API поведение сохранения не изменится для пользователя.
+
+---
+
+## Архитектура
+
+```
+data/questions.xlsx          ← источник данных (dev-заглушка)
+data/overrides.json          ← локальное хранилище правок
+
+lib/parseXlsx.ts             ← серверная логика: читает xlsx + overrides, пишет overrides
+lib/types.ts                 ← TypeScript типы (Question, AnswerRow, ControlRow, ...)
+lib/store.ts                 ← Zustand store (клиентское состояние)
+
+app/
+  page.tsx                   ← редирект на первый вопрос
+  layout.tsx                 ← общий layout (Sidebar всегда виден)
+  questions/[sheetName]/
+    page.tsx                 ← страница конкретного вопроса
+
+  api/
+    questions/route.ts       ← GET /api/questions → список всех вопросов
+    question/[sheetName]/
+      route.ts               ← GET /api/question/:id → данные вопроса
+                                PUT /api/question/:id → сохранить изменения
+    sync/route.ts            ← POST /api/sync → синхронизация с Google Sheets (заглушка)
+
+components/
+  Sidebar.tsx                ← список вопросов с поиском + кнопка синхронизации
+  TopBar.tsx                 ← заголовок текущего вопроса + кнопка сохранить
+  QuestionEditor.tsx         ← форма редактирования вопроса
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+---
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Структура вопроса
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Каждый лист xlsx / Google Sheets содержит:
 
-## Learn More
+| Поле | Описание |
+|---|---|
+| `title` | Заголовок вопроса (строка 6) |
+| `approval` | Статус утверждения: Росстат / ДЭПР / НТУ / ДИТ (Да / Нет) |
+| `card.id` | ID вопроса |
+| `card.abbreviation` | Аббревиатура |
+| `card.fillType` | Тип заполнения |
+| `card.precondition` | Предусловие показа вопроса |
+| `card.questionText` | Текст вопроса |
+| `card.helpText` | Текст справки |
+| `controls[]` | Таблица контролей (id, тип, условия, строгость) — может быть пустой |
+| `answers[]` | Таблица вариантов ответов (номер, тип, заголовок, подсказка, предуст. значение, код, переход на ID) |
 
-To learn more about Next.js, take a look at the following resources:
+---
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## Как работает сохранение (сейчас)
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+1. Пользователь редактирует поля в UI
+2. Изменения живут в Zustand store (`isDirty = true`)
+3. Нажимает "Сохранить" → PUT `/api/question/:sheetName`
+4. Сервер записывает данные в `data/overrides.json`
+5. При следующей загрузке: `base (xlsx) + overrides` = итоговые данные
 
-## Deploy on Vercel
+```
+xlsx (read-only)  +  overrides.json (read-write)
+        ↓
+    getQuestion()  →  merged Question object
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+## Как будет работать сохранение (production)
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+1. Шаги 1–3 те же
+2. Сервер пишет изменения в Google Sheets через Google Sheets API
+3. `/api/sync` — принудительная синхронизация всех изменений (если нужна)
+
+---
+
+## Запуск
+
+```bash
+cd forms-editor
+npm install
+npm run dev
+```
+
+Открыть: [http://localhost:3000](http://localhost:3000)
+
+> Убедитесь что файл `data/questions.xlsx` существует. При первом открытии приложение автоматически перейдёт на первый вопрос.
+
+---
+
+## Стек
+
+| | |
+|---|---|
+| Framework | Next.js 16 (App Router) |
+| UI | React 19 + Tailwind CSS v4 + shadcn/ui |
+| Состояние | Zustand 5 |
+| Таблицы | xlsx (dev) → Google Sheets API (prod) |
+| Язык | TypeScript |
+
+---
+
+## Важные детали
+
+- `next.config.ts` должен содержать `serverExternalPackages: ['xlsx']` — иначе Turbopack не может собрать серверный код с xlsx
+- `overrides.json` хранит только изменённые листы (не все 58), это delta поверх xlsx
+- Workbook кэшируется в памяти сервера; overrides читаются с диска при каждом запросе (чтобы подхватывать изменения без перезапуска)
+- Кириллические имена листов в URL передаются через `encodeURIComponent`
+
+---
+
+## Планируемые улучшения UX
+
+- [ ] Диалог подтверждения при переходе на другой вопрос с несохранёнными изменениями
+- [ ] Toast-уведомление после успешного сохранения
+- [ ] Обработка ошибок сохранения (показ ошибки, не сбрасывать `isDirty`)
+- [ ] Предупреждение при закрытии вкладки (`beforeunload`)
+- [ ] Сохранение по Ctrl+S
+- [ ] Кнопка "Сбросить изменения"
+- [ ] Валидация обязательных полей перед сохранением
+- [ ] Реальная синхронизация с Google Sheets API
