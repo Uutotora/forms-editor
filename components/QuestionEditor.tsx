@@ -135,10 +135,12 @@ function EditableField({
   );
 }
 
-function CollapsibleSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+function CollapsibleSection({ title, count, flash = false, children }: { title: string; count: number; flash?: boolean; children: React.ReactNode }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+    <div className={`bg-white rounded-2xl border overflow-hidden shadow-sm transition-all duration-500 ${
+      flash ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
+    }`}>
       <button
         onClick={() => setOpen((v) => !v)}
         className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
@@ -147,6 +149,12 @@ function CollapsibleSection({ title, count, children }: { title: string; count: 
           <span className="w-1 h-4 rounded-full bg-gray-300 flex-shrink-0" />
           <span className="text-xs font-bold uppercase tracking-widest text-gray-400">{title}</span>
           <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2.5 py-0.5">{count}</span>
+          {flash && (
+            <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              Сохранено
+            </span>
+          )}
         </div>
         <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
       </button>
@@ -191,18 +199,28 @@ export function QuestionEditor() {
       <div className="px-8 py-5 space-y-4">
 
         {/* Статус утверждения */}
-        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
-          <SectionTitle>Статус утверждения</SectionTitle>
+        <div className={`bg-white rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
+          savedFlash.approval ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <SectionTitle>Статус утверждения</SectionTitle>
+            {savedFlash.approval && (
+              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 mb-5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                Сохранено
+              </span>
+            )}
+          </div>
           <ApprovalChips approval={q.approval} savedApproval={saved?.approval} onChange={updateApproval} />
         </div>
 
         {/* Карточка вопроса */}
         <div className={`bg-white rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
-          savedFlash ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
+          savedFlash.card ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
         }`}>
           <div className="flex items-center justify-between">
             <SectionTitle>Карточка вопроса</SectionTitle>
-            {savedFlash && (
+            {savedFlash.card && (
               <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 mb-5">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
                 Сохранено
@@ -214,7 +232,7 @@ export function QuestionEditor() {
               const isRequired = key in REQUIRED_CARD_FIELDS;
               const label = CARD_LABELS[key];
               const hasError = isRequired && validationErrors.includes(label);
-              const isChanged = !hasError && !savedFlash && saved !== null &&
+              const isChanged = !hasError && !savedFlash.card && saved !== null &&
                 (saved.card[key as keyof typeof saved.card] ?? '') !== (q.card[key as keyof typeof q.card] ?? '');
               return (
                 <FieldRow key={key} label={label} required={isRequired} hasError={hasError}>
@@ -235,7 +253,7 @@ export function QuestionEditor() {
 
         {/* Контроли */}
         {q.controls.length > 0 && (
-          <CollapsibleSection title="Контроли" count={q.controls.length}>
+          <CollapsibleSection title="Контроли" count={q.controls.length} flash={savedFlash.controls}>
             <div className="overflow-x-auto mt-4">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -249,7 +267,7 @@ export function QuestionEditor() {
                   {q.controls.map((ctrl, idx) => (
                     <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => {
-                        const isChanged = !savedFlash && saved !== null &&
+                        const isChanged = !savedFlash.controls && saved !== null &&
                           (saved.controls[idx]?.[field] ?? '') !== ctrl[field];
                         return (
                           <td key={field} className="py-2 px-3 first:pl-0">
@@ -276,7 +294,7 @@ export function QuestionEditor() {
 
         {/* Варианты ответов */}
         {q.answers.length > 0 && (
-          <CollapsibleSection title="Варианты ответов" count={q.answers.length}>
+          <CollapsibleSection title="Варианты ответов" count={q.answers.length} flash={savedFlash.answers}>
             <div className="overflow-x-auto mt-4">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -290,7 +308,7 @@ export function QuestionEditor() {
                   {q.answers.map((ans, idx) => (
                     <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
                       {(['number', 'abbreviation', 'type', 'variantType', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
-                        const isChanged = !savedFlash && saved !== null &&
+                        const isChanged = !savedFlash.answers && saved !== null &&
                           (saved.answers[idx]?.[field] ?? '') !== ans[field];
                         return (
                           <td key={field} className="py-2 px-3 first:pl-0">

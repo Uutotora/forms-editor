@@ -40,7 +40,7 @@ interface Store {
   isSyncing: boolean;
   syncProgress: number;       // 0–100, для прогресс-бара
   syncWarning: boolean;
-  savedFlash: boolean;        // кратковременная зелёная подсветка после сохранения
+  savedFlash: { approval: boolean; card: boolean; controls: boolean; answers: boolean };
   toast: Toast | null;
   pendingNavigation: string | null;
   validationErrors: string[];
@@ -74,7 +74,7 @@ export const useStore = create<Store>((set, get) => ({
   isSyncing: false,
   syncProgress: 0,
   syncWarning: false,
-  savedFlash: false,
+  savedFlash: { approval: false, card: false, controls: false, answers: false },
   toast: null,
   pendingNavigation: null,
   validationErrors: [],
@@ -148,7 +148,7 @@ export const useStore = create<Store>((set, get) => ({
   },
 
   saveQuestion: async () => {
-    const { currentQuestion, questions, unsavedQuestions } = get();
+    const { currentQuestion, savedQuestion, questions, unsavedQuestions } = get();
     if (!currentQuestion) return;
 
     const errors = validateQuestion(currentQuestion);
@@ -157,6 +157,15 @@ export const useStore = create<Store>((set, get) => ({
       get().showToast(`Заполните обязательные поля: ${errors.join(', ')}`, 'error');
       return;
     }
+
+    // Вычисляем какие блоки реально изменились (для точечного флеша)
+    const prev = savedQuestion;
+    const flash = {
+      approval:  !prev || JSON.stringify(currentQuestion.approval) !== JSON.stringify(prev.approval),
+      card:      !prev || JSON.stringify(currentQuestion.card) !== JSON.stringify(prev.card) || currentQuestion.title !== prev.title,
+      controls:  !prev || JSON.stringify(currentQuestion.controls) !== JSON.stringify(prev.controls),
+      answers:   !prev || JSON.stringify(currentQuestion.answers) !== JSON.stringify(prev.answers),
+    };
 
     set({ isSaving: true, validationErrors: [] });
     try {
@@ -174,15 +183,14 @@ export const useStore = create<Store>((set, get) => ({
         isSaving: false,
         isDirty: false,
         savedQuestion: currentQuestion,
-        savedFlash: true,
+        savedFlash: flash,
         unsavedQuestions: newUnsaved,
         questions: questions.map((q) =>
           q.sheetName === currentQuestion.sheetName ? { ...q, hasChanges: true } : q
         ),
       });
 
-      // Сбрасываем зелёный флеш через 1.5 сек
-      setTimeout(() => set({ savedFlash: false }), 1500);
+      setTimeout(() => set({ savedFlash: { approval: false, card: false, controls: false, answers: false } }), 1500);
 
       get().showToast('Изменения сохранены', 'success');
     } catch {
