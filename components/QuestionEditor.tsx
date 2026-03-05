@@ -258,6 +258,9 @@ export function QuestionEditor() {
 
         {/* Контроли */}
         <CollapsibleSection title="Контроли" count={q.controls.length} flash={savedFlash.controls}>
+          {q.controls.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-400 italic">Нет данных</p>
+          ) : (
             <div className="overflow-x-auto mt-4">
               <table className="w-full text-sm border-collapse">
                 <thead>
@@ -280,10 +283,14 @@ export function QuestionEditor() {
                 </tbody>
               </table>
             </div>
-          </CollapsibleSection>
+          )}
+        </CollapsibleSection>
 
         {/* Варианты ответов */}
         <CollapsibleSection title="Варианты ответов" count={q.answers.length} flash={savedFlash.answers}>
+          {q.answers.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-400 italic">Нет данных</p>
+          ) : (
             <div className="mt-4 space-y-3">
               {q.answers.map((ans, idx) => {
                 const headerChanged = !savedFlash.answers && saved !== null &&
@@ -359,6 +366,7 @@ export function QuestionEditor() {
                 );
               })}
             </div>
+          )}
           </CollapsibleSection>
 
         <div className="h-4" />

@@ -44,6 +44,19 @@ async function getSheetNames(): Promise<string[]> {
   return _sheetNamesCache;
 }
 
+// Вспомогательная функция: парсим данные листа из gridData API
+function extractRowsFromGridData(s: { data?: Array<{ rowData?: Array<{ values?: Array<{ formattedValue?: string | null }> }> }> }): string[][] {
+  const rows: string[][] = [];
+  for (const gridData of s.data ?? []) {
+    for (const rowData of (gridData.rowData ?? []).slice(0, 300)) {
+      rows.push(
+        (rowData.values ?? []).slice(0, 10).map((c) => (c.formattedValue ?? '').toString())
+      );
+    }
+  }
+  return rows;
+}
+
 async function getSheetValues(sheetName: string): Promise<string[][]> {
   if (_sheetCache.has(sheetName)) return _sheetCache.get(sheetName)!;
   const sheets = getSheetsClient();
@@ -56,25 +69,22 @@ async function getSheetValues(sheetName: string): Promise<string[][]> {
     });
     values = (res.data.values ?? []) as string[][];
   } catch {
-    // Fallback for sheet names with dots/special chars that confuse the range parser
-    await getSheetNames(); // ensure sheetId is cached
+    // Fallback: листы с точками/спецсимволами ломают парсер диапазонов Google Sheets.
+    // Используем spreadsheets.get с includeGridData, ограничивая данные диапазоном A1:J300
+    // (без имени листа — применяется ко всем листам геометрически, парсинга имён нет).
+    // Попутно кэшируем все остальные листы из того же ответа.
+    await getSheetNames(); // убеждаемся что sheetId закэширован
     const sheetId = _sheetIdCache.get(sheetName);
     const fullRes = await sheets.spreadsheets.get({
       spreadsheetId: SPREADSHEET_ID,
       includeGridData: true,
+      ranges: ['A1:J300'],
     });
     for (const s of fullRes.data.sheets ?? []) {
       const name = s.properties?.title;
       if (!name) continue;
-      if (_sheetCache.has(name)) continue; // don't overwrite existing cache
-      const rows: string[][] = [];
-      for (const gridData of s.data ?? []) {
-        for (const rowData of (gridData.rowData ?? []).slice(0, 300)) {
-          rows.push(
-            (rowData.values ?? []).slice(0, 10).map((c) => (c.formattedValue ?? '').toString())
-          );
-        }
-      }
+      if (_sheetCache.has(name)) continue; // не перетираем уже закэшированные
+      const rows = extractRowsFromGridData(s as Parameters<typeof extractRowsFromGridData>[0]);
       _sheetCache.set(name, rows);
       if (s.properties?.sheetId === sheetId) values = rows;
     }
@@ -158,30 +168,37 @@ function parseRows(rows: string[][]): Omit<Question, 'sheetName'> {
 // ── Публичное API (аналог parseXlsx.ts) ────────────────────────────────────
 
 export async function getQuestionList(): Promise<QuestionSummary[]> {
-  const sheetNames = await getSheetNames();
   const sheets = getSheetsClient();
 
-  // includeGridData с ranges=['A7'] (без имени листа) возвращает только ячейку A7
-  // каждого листа — обходит ошибку парсинга для листов с точками в названии
-  const fullRes = await sheets.spreadsheets.get({
+  // Один запрос: метаданные + строка A7 для каждого листа.
+  // ranges без имени листа применяется геометрически ко всем листам —
+  // никакого парсинга имён, точки в названиях не ломают запрос.
+  const res = await sheets.spreadsheets.get({
     spreadsheetId: SPREADSHEET_ID,
     includeGridData: true,
-    ranges: ['A7'],
+    ranges: ['A7:A7'],
   });
 
-  const sheetMap = new Map<string, string>();
-  for (const s of fullRes.data.sheets ?? []) {
-    const name = s.properties?.title;
-    if (!name) continue;
-    const title = s.data?.[0]?.rowData?.[0]?.values?.[0]?.formattedValue ?? name;
-    sheetMap.set(name, title as string);
+  const result: QuestionSummary[] = [];
+  for (const s of res.data.sheets ?? []) {
+    const sheetName = s.properties?.title;
+    const sheetId = s.properties?.sheetId;
+    if (!sheetName) continue;
+
+    // Кэшируем sheetId, чтобы не делать лишний getSheetNames() позже
+    if (sheetId != null) _sheetIdCache.set(sheetName, sheetId);
+
+    // rowData[0] = строка A7, values[0] = ячейка A (col 0)
+    const title = (s.data?.[0]?.rowData?.[0]?.values?.[0]?.formattedValue as string | undefined | null) ?? sheetName;
+    result.push({ sheetName, title: title || sheetName, hasChanges: false });
   }
 
-  return sheetNames.map((sheetName) => ({
-    sheetName,
-    title: sheetMap.get(sheetName) ?? sheetName,
-    hasChanges: false,
-  }));
+  // Синхронизируем _sheetNamesCache из того же ответа
+  if (!_sheetNamesCache) {
+    _sheetNamesCache = result.map((q) => q.sheetName);
+  }
+
+  return result;
 }
 
 export async function getQuestion(sheetName: string): Promise<Question | null> {
@@ -199,59 +216,71 @@ const GREEN_BG = { red: 0.851, green: 0.918, blue: 0.827 }; // #D9EAD3
 export async function saveQuestion(sheetName: string, current: Question): Promise<void> {
   const sheets = getSheetsClient();
 
-  // Читаем текущее состояние прямо из кэша (он заполнился при loadQuestion)
-  // Это единственный надёжный источник "до изменений"
+  // Читаем "до изменений" из кэша (заполнился при loadQuestion)
   const savedRows = await getSheetValues(sheetName);
   const savedState = parseRows(savedRows);
 
-  await getSheetNames(); // убеждаемся что sheetId закэширован
-  const sheetId = _sheetIdCache.get(sheetName) ?? 0;
+  // sheetId нужен для всех операций — гарантированно кэшируем
+  await getSheetNames();
+  const sheetId = _sheetIdCache.get(sheetName);
+  if (sheetId == null) throw new Error(`sheetId not found for sheet: ${sheetName}`);
+
+  // ── Все записи через spreadsheets.batchUpdate (GridRange по числовому sheetId) ──
+  // Это единственный способ надёжно писать в листы с точками/спецсимволами в названии,
+  // т.к. values API парсит строки диапазонов и падает на таких именах.
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const requests: any[] = [];
+
+  // Вспомогательная функция: UpdateCellsRequest для одной ячейки
+  function cellUpdate(rowIndex: number, colIndex: number, value: string) {
+    return {
+      updateCells: {
+        range: { sheetId, startRowIndex: rowIndex, endRowIndex: rowIndex + 1, startColumnIndex: colIndex, endColumnIndex: colIndex + 1 },
+        rows: [{ values: [{ userEnteredValue: { stringValue: value } }] }],
+        fields: 'userEnteredValue',
+      },
+    };
+  }
+
+  // ── 1. Фиксированные ячейки (только изменившиеся) ───────────────────────
+  if (current.title !== savedState.title) {
+    requests.push(cellUpdate(6, 0, current.title)); // A7
+  }
 
   const approvalKeys = ['rosstat', 'depr', 'ntu', 'dit'] as const;
-  const approvalRanges = ['C2', 'C3', 'C4', 'C5'];
-  const cardKeys = ['id', 'abbreviation', 'fillType', 'precondition', 'questionText', 'helpText'] as const;
-  const cardRanges = ['B9', 'B10', 'B11', 'B12', 'B13', 'B14'];
-
-  // ── 1. Только изменённые фиксированные ячейки ───────────────────────────
-  const valueUpdates: { range: string; values: string[][] }[] = [];
-
-  if (current.title !== savedState.title) {
-    valueUpdates.push({ range: `'${sheetName}'!A7`, values: [[current.title]] });
-  }
-
   approvalKeys.forEach((key, i) => {
     if (current.approval[key] !== savedState.approval[key]) {
-      valueUpdates.push({ range: `'${sheetName}'!${approvalRanges[i]}`, values: [[current.approval[key]]] });
+      requests.push(cellUpdate(i + 1, 2, current.approval[key])); // C2–C5
     }
   });
 
+  const cardKeys = ['id', 'abbreviation', 'fillType', 'precondition', 'questionText', 'helpText'] as const;
   cardKeys.forEach((key, i) => {
     if (current.card[key] !== savedState.card[key]) {
-      valueUpdates.push({ range: `'${sheetName}'!${cardRanges[i]}`, values: [[current.card[key]]] });
+      requests.push(cellUpdate(i + 8, 1, current.card[key])); // B9–B14
     }
   });
-
-  if (valueUpdates.length > 0) {
-    await sheets.spreadsheets.values.batchUpdate({
-      spreadsheetId: SPREADSHEET_ID,
-      requestBody: { valueInputOption: 'RAW', data: valueUpdates },
-    });
-  }
 
   // ── 2. Таблицы контролей и ответов (если изменились) ────────────────────
   const controlsChanged = JSON.stringify(current.controls) !== JSON.stringify(savedState.controls);
   const answersChanged  = JSON.stringify(current.answers)  !== JSON.stringify(savedState.answers);
 
   if (controlsChanged || answersChanged) {
-    await sheets.spreadsheets.values.clear({
-      spreadsheetId: SPREADSHEET_ID,
-      range: `'${sheetName}'!A16:J300`,
+    // Очищаем A16:J300 (rowIndex 15–299, colIndex 0–9)
+    requests.push({
+      repeatCell: {
+        range: { sheetId, startRowIndex: 15, endRowIndex: 300, startColumnIndex: 0, endColumnIndex: 10 },
+        cell: {},
+        fields: 'userEnteredValue',
+      },
     });
 
+    // Строим таблицу: сначала контроли, потом заголовок ответов, потом ответы
     const tableRows: string[][] = [];
 
     for (const ctrl of current.controls) {
-      const row = ['', '', '', '', '', '', '', '', ''];
+      const row = Array<string>(9).fill('');
       row[0] = ctrl.id;
       row[1] = ctrl.type;
       row[3] = ctrl.conditions;
@@ -259,43 +288,48 @@ export async function saveQuestion(sheetName: string, current: Question): Promis
       tableRows.push(row);
     }
 
-    tableRows.push(['№ ответа', 'Аббревиатура ответа', 'Тип ответа', 'Тип варианта ответа', 'Текст заголовка ответа', 'Текст подсказки ответа', 'Предустановленное значение', 'Код ответа', 'Переход на id']);
+    tableRows.push([
+      '№ ответа', 'Аббревиатура ответа', 'Тип ответа', 'Тип варианта ответа',
+      'Текст заголовка ответа', 'Текст подсказки ответа', 'Предустановленное значение',
+      'Код ответа', 'Переход на id',
+    ]);
 
     for (const ans of current.answers) {
       tableRows.push([ans.number, ans.abbreviation, ans.type, ans.variantType, ans.headerText, ans.hintText, ans.defaultValue, ans.code, ans.nextId]);
     }
 
-    if (tableRows.length > 0) {
-      await sheets.spreadsheets.values.update({
-        spreadsheetId: SPREADSHEET_ID,
-        range: `'${sheetName}'!A16`,
-        valueInputOption: 'RAW',
-        requestBody: { values: tableRows },
-      });
-    }
+    requests.push({
+      updateCells: {
+        range: { sheetId, startRowIndex: 15, endRowIndex: 15 + tableRows.length, startColumnIndex: 0, endColumnIndex: 9 },
+        rows: tableRows.map((row) => ({
+          values: row.map((v) => ({ userEnteredValue: { stringValue: v } })),
+        })),
+        fields: 'userEnteredValue',
+      },
+    });
   }
 
   // ── 3. Цвет B2:C5 — только для изменившихся строк утверждения ────────────
-  const colorRequests = approvalKeys
-    .filter((key) => current.approval[key] !== savedState.approval[key])
-    .map((key) => {
-      const i = approvalKeys.indexOf(key);
-      return {
+  approvalKeys.forEach((key, i) => {
+    if (current.approval[key] !== savedState.approval[key]) {
+      requests.push({
         repeatCell: {
           range: { sheetId, startRowIndex: i + 1, endRowIndex: i + 2, startColumnIndex: 1, endColumnIndex: 3 },
           cell: { userEnteredFormat: { backgroundColor: current.approval[key] === 'Да' ? GREEN_BG : RED_BG } },
           fields: 'userEnteredFormat.backgroundColor',
         },
-      };
-    });
+      });
+    }
+  });
 
-  if (colorRequests.length > 0) {
+  // ── Один API-вызов на всё ────────────────────────────────────────────────
+  if (requests.length > 0) {
     await sheets.spreadsheets.batchUpdate({
       spreadsheetId: SPREADSHEET_ID,
-      requestBody: { requests: colorRequests },
+      requestBody: { requests },
     });
   }
 
-  // Инвалидируем кэш этого листа — следующий read подтянет свежие данные
+  // Инвалидируем кэш листа — следующее чтение подтянет актуальные данные
   _sheetCache.delete(sheetName);
 }
