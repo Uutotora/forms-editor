@@ -1,0 +1,235 @@
+---
+- name: Deploy forms-editor to servers
+  hosts: forms_editor
+  become: true
+  vars:
+    source_archive: /tmp/forms-editor-release.tar.gz
+    local_build_root: /tmp/forms-editor-build
+    local_build_dir: "{{ local_build_root }}/src"
+
+  pre_tasks:
+    - name: Check local service account file exists
+      ansible.builtin.stat:
+        path: "{{ service_account_src }}"
+      register: sa_local
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Fail if service account file is missing
+      ansible.builtin.fail:
+        msg: "Local file {{ service_account_src }} not found. Put Google key there before deploy."
+      when: not sa_local.stat.exists
+      run_once: true
+
+    - name: Remove previous local build directory
+      ansible.builtin.file:
+        path: "{{ local_build_root }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Create local build directory
+      ansible.builtin.file:
+        path: "{{ local_build_dir }}"
+        state: directory
+        mode: '0755'
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Copy source code to local build directory
+      ansible.builtin.command:
+        cmd: >-
+          bash -lc "tar -cf -
+          --exclude=.git
+          --exclude=node_modules
+          --exclude=.next
+          --exclude=ansible
+          -C {{ playbook_dir }}/.. .
+          | tar -xf - -C {{ local_build_dir }}"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Install dependencies locally
+      ansible.builtin.command:
+        cmd: npm ci
+        chdir: "{{ local_build_dir }}"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Build Next.js app locally
+      ansible.builtin.command:
+        cmd: npm run build
+        chdir: "{{ local_build_dir }}"
+      environment:
+        NODE_OPTIONS: "--max-old-space-size={{ node_build_max_old_space_mb }}"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Keep only production dependencies locally
+      ansible.builtin.command:
+        cmd: npm prune --omit=dev
+        chdir: "{{ local_build_dir }}"
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Create local release archive
+      ansible.builtin.command:
+        cmd: tar -czf {{ source_archive }} -C {{ local_build_dir }} .
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+  tasks:
+    - name: Check installed Node.js major version
+      ansible.builtin.command:
+        cmd: node -p process.versions.node.split('.')[0]
+      register: node_major_installed
+      changed_when: false
+      failed_when: false
+
+    - name: Decide whether Node.js install/update is needed
+      ansible.builtin.set_fact:
+        node_needs_install: "{{ node_major_installed.rc != 0 or (node_major_installed.stdout | trim) != (nodejs_major | string) }}"
+
+    - name: Install base packages (if Node.js install/update is needed)
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+        state: present
+        update_cache: true
+      when: node_needs_install
+
+    - name: Ensure apt keyrings dir exists (if Node.js install/update is needed)
+      ansible.builtin.file:
+        path: /etc/apt/keyrings
+        state: directory
+        mode: '0755'
+      when: node_needs_install
+
+    - name: Download NodeSource GPG key (if Node.js install/update is needed)
+      ansible.builtin.get_url:
+        url: https://deb.nodesource.com/gpgkey/nodesource-repo.gpg.key
+        dest: /tmp/nodesource-repo.gpg.key
+        mode: '0644'
+      when: node_needs_install
+
+    - name: Convert NodeSource key to keyring (if Node.js install/update is needed)
+      ansible.builtin.command:
+        cmd: gpg --dearmor -o /etc/apt/keyrings/nodesource.gpg /tmp/nodesource-repo.gpg.key
+      args:
+        creates: /etc/apt/keyrings/nodesource.gpg
+      when: node_needs_install
+
+    - name: Add NodeSource apt repository (if Node.js install/update is needed)
+      ansible.builtin.copy:
+        dest: /etc/apt/sources.list.d/nodesource.list
+        mode: '0644'
+        content: |
+          deb [signed-by=/etc/apt/keyrings/nodesource.gpg] https://deb.nodesource.com/node_{{ nodejs_major }}.x nodistro main
+      when: node_needs_install
+
+    - name: Install/upgrade Node.js to target major (if needed)
+      ansible.builtin.apt:
+        name: nodejs
+        state: present
+        update_cache: true
+      when: node_needs_install
+
+    - name: Stop forms-editor service (if present)
+      ansible.builtin.command:
+        cmd: systemctl stop forms-editor
+      changed_when: false
+      failed_when: false
+
+    - name: Ensure app directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Remove current app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}/current"
+        state: absent
+
+    - name: Recreate current app directory
+      ansible.builtin.file:
+        path: "{{ app_dir }}/current"
+        state: directory
+        mode: '0755'
+
+    - name: Upload release archive
+      ansible.builtin.copy:
+        src: "{{ source_archive }}"
+        dest: "{{ source_archive }}"
+        mode: '0644'
+
+    - name: Unpack release on server
+      ansible.builtin.unarchive:
+        src: "{{ source_archive }}"
+        dest: "{{ app_dir }}/current"
+        remote_src: true
+
+    - name: Ensure data directory exists
+      ansible.builtin.file:
+        path: "{{ app_dir }}/current/data"
+        state: directory
+        mode: '0755'
+
+    - name: Upload service account key
+      ansible.builtin.copy:
+        src: "{{ service_account_src }}"
+        dest: "{{ app_dir }}/current/data/service-account.json"
+        mode: '0600'
+
+    - name: Write production env file
+      ansible.builtin.copy:
+        dest: "{{ app_dir }}/current/.env.production"
+        mode: '0600'
+        content: |
+          GOOGLE_SPREADSHEET_ID={{ GOOGLE_SPREADSHEET_ID }}
+          GOOGLE_CREDENTIALS_PATH=data/service-account.json
+
+    - name: Install systemd service
+      ansible.builtin.template:
+        src: templates/forms-editor.service.j2
+        dest: /etc/systemd/system/forms-editor.service
+        mode: '0644'
+
+    - name: Start and enable forms-editor service
+      ansible.builtin.systemd:
+        name: forms-editor
+        enabled: true
+        state: started
+        daemon_reload: true
+
+  post_tasks:
+    - name: Remove temporary archive from server
+      ansible.builtin.file:
+        path: "{{ source_archive }}"
+        state: absent
+
+    - name: Remove local release archive
+      ansible.builtin.file:
+        path: "{{ source_archive }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      run_once: true
+
+    - name: Remove local build directory
+      ansible.builtin.file:
+        path: "{{ local_build_root }}"
+        state: absent
+      delegate_to: localhost
+      become: false
+      run_once: true

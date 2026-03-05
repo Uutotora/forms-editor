@@ -1,0 +1,11 @@
+app_name: forms-editor
+app_dir: /opt/forms-editor
+app_port: 3000
+
+GOOGLE_SPREADSHEET_ID: ""
+
+# Локальный путь к ключу service account на машине, где запускается ansible-playbook
+service_account_src: "{{ playbook_dir }}/service-account.json"
+
+nodejs_major: 22
+node_build_max_old_space_mb: 2048
