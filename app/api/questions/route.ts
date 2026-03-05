@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server';
-import { getQuestionList } from '@/lib/parseXlsx';
+import { getQuestionList } from '@/lib/googleSheets';
 
 export async function GET() {
   try {
-    const questions = getQuestionList();
+    const questions = await getQuestionList();
     return NextResponse.json({ questions });
   } catch (error) {
     console.error('Failed to load questions:', error);

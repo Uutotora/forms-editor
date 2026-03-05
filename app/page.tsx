@@ -1,10 +1,10 @@
 import { redirect } from 'next/navigation';
-import { getQuestionList } from '@/lib/parseXlsx';
+import { getQuestionList } from '@/lib/googleSheets';
 
 export const dynamic = 'force-dynamic';
 
-export default function Home() {
-  const questions = getQuestionList();
+export default async function Home() {
+  const questions = await getQuestionList();
   if (questions.length > 0) {
     redirect(`/questions/${encodeURIComponent(questions[0].sheetName)}`);
   }

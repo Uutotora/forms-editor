@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getQuestion, saveQuestion } from '@/lib/parseXlsx';
+import { getQuestion, saveQuestion } from '@/lib/googleSheets';
 
 export async function GET(
   _req: NextRequest,
@@ -7,7 +7,7 @@ export async function GET(
 ) {
   const { sheetName } = await params;
   const decoded = decodeURIComponent(sheetName);
-  const question = getQuestion(decoded);
+  const question = await getQuestion(decoded);
   if (!question) {
     return NextResponse.json({ error: 'Not found' }, { status: 404 });
   }
@@ -21,6 +21,6 @@ export async function PUT(
   const { sheetName } = await params;
   const decoded = decodeURIComponent(sheetName);
   const body = await req.json();
-  saveQuestion(decoded, body);
+  await saveQuestion(decoded, body);
   return NextResponse.json({ success: true });
 }
