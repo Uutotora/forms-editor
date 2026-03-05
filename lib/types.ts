@@ -13,6 +13,7 @@ export interface CardFields {
   precondition: string;
   questionText: string;
   helpText: string;
+  [key: string]: string;
 }
 
 export interface ControlRow {
