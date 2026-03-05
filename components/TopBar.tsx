@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import { Save, Loader2, RefreshCw, RotateCcw } from 'lucide-react';
+import { Save, Loader2, RefreshCw, Undo2, Redo2 } from 'lucide-react';
 
 export function TopBar() {
   const {
@@ -10,25 +10,41 @@ export function TopBar() {
     isDirty,
     isSaving,
     isSyncing,
-    isResetting,
+    historyIndex,
+    history,
     saveQuestion,
-    resetQuestion,
+    undo,
+    redo,
     sync,
   } = useStore();
 
-  // Ctrl+S / Cmd+S to save
+  const canUndo = historyIndex > 0;
+  const canRedo = historyIndex < history.length - 1;
+
+  // Ctrl+S / Cmd+S
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && e.key === 's') {
         e.preventDefault();
         if (isDirty && !isSaving) saveQuestion();
       }
+      if ((e.ctrlKey || e.metaKey) && e.key === 'z' && !e.shiftKey) {
+        e.preventDefault();
+        if (canUndo) undo();
+      }
+      if (
+        (e.ctrlKey || e.metaKey) && e.key === 'z' && e.shiftKey ||
+        (e.ctrlKey || e.metaKey) && e.key === 'y'
+      ) {
+        e.preventDefault();
+        if (canRedo) redo();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [isDirty, isSaving, saveQuestion]);
+  }, [isDirty, isSaving, canUndo, canRedo, saveQuestion, undo, redo]);
 
-  // Warn on tab close with unsaved changes
+  // Warn on tab close
   useEffect(() => {
     const handleBeforeUnload = (e: BeforeUnloadEvent) => {
       if (isDirty) e.preventDefault();
@@ -48,28 +64,37 @@ export function TopBar() {
         <p className="text-xs text-gray-400">{currentQuestion.sheetName}</p>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1">
         {isDirty && (
-          <div className="flex items-center gap-1.5 text-xs text-amber-600 mr-1">
+          <div className="flex items-center gap-1.5 text-xs text-amber-600 mr-2">
             <div className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
             Есть изменения
           </div>
         )}
 
-        {/* Reset button — only when dirty */}
-        {isDirty && (
-          <button
-            onClick={resetQuestion}
-            disabled={isResetting}
-            title="Сбросить все изменения"
-            className="flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium text-gray-500 hover:text-red-500 hover:bg-red-50 transition-all duration-150 disabled:opacity-50"
-          >
-            <RotateCcw className={`h-4 w-4 ${isResetting ? 'animate-spin' : ''}`} />
-            <span className="hidden sm:inline">Сбросить</span>
-          </button>
-        )}
+        {/* Undo */}
+        <button
+          onClick={undo}
+          disabled={!canUndo}
+          title="Отменить (Ctrl+Z)"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+        >
+          <Undo2 className="h-4 w-4" />
+        </button>
 
-        {/* Sync button */}
+        {/* Redo */}
+        <button
+          onClick={redo}
+          disabled={!canRedo}
+          title="Повторить (Ctrl+Shift+Z)"
+          className="flex items-center justify-center w-8 h-8 rounded-lg text-gray-400 hover:text-gray-700 hover:bg-gray-100 transition-all duration-150 disabled:opacity-30 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:text-gray-400"
+        >
+          <Redo2 className="h-4 w-4" />
+        </button>
+
+        <div className="w-px h-5 bg-gray-200 mx-1" />
+
+        {/* Sync */}
         <button
           onClick={sync}
           disabled={isSyncing}
@@ -80,7 +105,7 @@ export function TopBar() {
           <span className="hidden sm:inline">{isSyncing ? 'Синхронизация...' : 'Синхронизировать'}</span>
         </button>
 
-        {/* Save button */}
+        {/* Save */}
         <button
           onClick={saveQuestion}
           disabled={!isDirty || isSaving}
@@ -91,11 +116,7 @@ export function TopBar() {
               : 'bg-gray-100 text-gray-400 cursor-not-allowed'
           }`}
         >
-          {isSaving ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
+          {isSaving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
           {isSaving ? 'Сохранение...' : 'Сохранить'}
         </button>
       </div>

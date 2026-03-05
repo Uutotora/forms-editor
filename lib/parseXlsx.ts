@@ -14,10 +14,8 @@ function getCellValue(ws: XLSX.WorkSheet, row: number, col: number): string {
 }
 
 function parseSheet(ws: XLSX.WorkSheet): Omit<Question, 'sheetName'> {
-  // Title at row 6, col 0
   const title = getCellValue(ws, 6, 0);
 
-  // Approval rows 1-4, col 0 (label) and col 1 (value)
   const approval = {
     rosstat: getCellValue(ws, 1, 1),
     depr: getCellValue(ws, 2, 1),
@@ -25,7 +23,6 @@ function parseSheet(ws: XLSX.WorkSheet): Omit<Question, 'sheetName'> {
     dit: getCellValue(ws, 4, 1),
   };
 
-  // Card fields rows 8-13, col 0 (label) and col 1 (value)
   const card = {
     id: getCellValue(ws, 8, 1),
     abbreviation: getCellValue(ws, 9, 1),
@@ -35,7 +32,6 @@ function parseSheet(ws: XLSX.WorkSheet): Omit<Question, 'sheetName'> {
     helpText: getCellValue(ws, 13, 1),
   };
 
-  // Controls table: row 14 = headers, rows 15+ = data (until next section or empty)
   const controls: ControlRow[] = [];
   let row = 15;
   while (true) {
@@ -44,13 +40,11 @@ function parseSheet(ws: XLSX.WorkSheet): Omit<Question, 'sheetName'> {
     const conditions = getCellValue(ws, row, 2);
     const strictness = getCellValue(ws, row, 6);
     if (!id && !type && !conditions && !strictness) break;
-    // Check if this row looks like a new section header (answers header)
     if (id === '№ ответа' || id === '№') break;
     controls.push({ id, type, conditions, strictness });
     row++;
   }
 
-  // Answers table: find header row dynamically
   const range = XLSX.utils.decode_range(ws['!ref'] || 'A1:A1');
   let answersHeaderRow = -1;
   for (let r = 14; r <= range.e.r; r++) {
@@ -98,6 +92,11 @@ function getWorkbook(): XLSX.WorkBook {
     _workbook = XLSX.readFile(FILE_PATH);
   }
   return _workbook;
+}
+
+// Сбросить кэш воркбука — используется при синхронизации
+export function invalidateCache(): void {
+  _workbook = null;
 }
 
 export function getQuestionList(): QuestionSummary[] {

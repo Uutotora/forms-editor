@@ -1,14 +1,15 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { useStore } from '@/lib/store';
-import type { Question, ControlRow, AnswerRow } from '@/lib/types';
-import { Plus, Trash2 } from 'lucide-react';
+import type { ControlRow, AnswerRow } from '@/lib/types';
+import { ChevronDown } from 'lucide-react';
 
 const APPROVAL_LABELS: Record<string, string> = {
-  rosstat: 'Утвержден Росстат',
-  depr: 'Утвержден ДЭПР',
-  ntu: 'Утвержден НТУ',
-  dit: 'Утвержден ДИТ',
+  rosstat: 'Росстат',
+  depr: 'ДЭПР',
+  ntu: 'НТУ',
+  dit: 'ДИТ',
 };
 
 const CARD_LABELS: Record<string, string> = {
@@ -20,7 +21,6 @@ const CARD_LABELS: Record<string, string> = {
   helpText: 'Текст справки',
 };
 
-// Must match labels in store.ts REQUIRED_FIELDS
 const REQUIRED_CARD_FIELDS: Record<string, string> = {
   id: 'ID вопроса',
   questionText: 'Текст вопроса',
@@ -28,26 +28,21 @@ const REQUIRED_CARD_FIELDS: Record<string, string> = {
 
 function SectionTitle({ children }: { children: React.ReactNode }) {
   return (
-    <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400 mb-3">
-      {children}
-    </h2>
+    <div className="flex items-center gap-3 mb-3">
+      <span className="w-1 h-4 rounded-full bg-blue-500 flex-shrink-0" />
+      <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">{children}</h2>
+    </div>
   );
 }
 
 function FieldRow({
-  label,
-  children,
-  required,
-  hasError,
+  label, children, required, hasError,
 }: {
-  label: string;
-  children: React.ReactNode;
-  required?: boolean;
-  hasError?: boolean;
+  label: string; children: React.ReactNode; required?: boolean; hasError?: boolean;
 }) {
   return (
-    <div className="grid grid-cols-[200px_1fr] gap-4 items-start py-3 border-b border-gray-100 last:border-0">
-      <span className={`text-sm pt-1.5 font-medium flex items-center gap-1 ${hasError ? 'text-red-500' : 'text-gray-500'}`}>
+    <div className="grid grid-cols-[200px_1fr] gap-4 items-start py-2.5 border-b border-gray-100 last:border-0">
+      <span className={`text-sm pt-1.5 font-medium flex items-center gap-1.5 ${hasError ? 'text-red-500' : 'text-gray-500'}`}>
         {label}
         {required && <span className="text-red-400 text-xs leading-none">*</span>}
       </span>
@@ -56,72 +51,112 @@ function FieldRow({
   );
 }
 
-function ApprovalToggle({
-  value,
-  onChange,
+function ApprovalChips({
+  approval, savedApproval, onChange,
 }: {
-  value: string;
-  onChange: (v: string) => void;
+  approval: Record<string, string>;
+  savedApproval: Record<string, string> | undefined;
+  onChange: (key: string, value: string) => void;
 }) {
-  const isYes = value === 'Да';
   return (
-    <button
-      onClick={() => onChange(isYes ? 'Нет' : 'Да')}
-      className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-medium transition-all duration-150 ${
-        isYes
-          ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
-          : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
-      }`}
-    >
-      <span className={`w-1.5 h-1.5 rounded-full ${isYes ? 'bg-emerald-500' : 'bg-gray-300'}`} />
-      {isYes ? 'Да' : 'Нет'}
-    </button>
+    <div className="flex flex-wrap gap-2.5">
+      {(Object.keys(APPROVAL_LABELS) as Array<keyof typeof APPROVAL_LABELS>).map((key) => {
+        const isYes = (approval[key] || 'Нет') === 'Да';
+        const isChanged = savedApproval !== undefined && savedApproval[key] !== approval[key];
+        return (
+          <button
+            key={key}
+            onClick={() => onChange(key, isYes ? 'Нет' : 'Да')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-medium transition-all duration-150 ${
+              isChanged
+                ? 'bg-amber-50 text-amber-700 border border-amber-300 hover:bg-amber-100'
+                : isYes
+                ? 'bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100'
+                : 'bg-gray-50 text-gray-500 border border-gray-200 hover:bg-gray-100'
+            }`}
+          >
+            <span className={`w-2 h-2 rounded-full flex-shrink-0 ${
+              isChanged ? 'bg-amber-400' : isYes ? 'bg-emerald-500' : 'bg-gray-300'
+            }`} />
+            {APPROVAL_LABELS[key]}
+            <span className={`text-xs px-1.5 py-0.5 rounded-full font-semibold ${
+              isChanged ? 'bg-amber-100' : isYes ? 'bg-emerald-100' : 'bg-gray-100'
+            }`}>
+              {isYes ? 'Да' : 'Нет'}
+            </span>
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
 function EditableField({
-  value,
-  onChange,
-  multiline = false,
-  placeholder = '—',
-  hasError = false,
+  value, onChange, onCommit, multiline = false, placeholder = '—', hasError = false, isChanged = false,
 }: {
-  value: string;
-  onChange: (v: string) => void;
-  multiline?: boolean;
-  placeholder?: string;
-  hasError?: boolean;
+  value: string; onChange: (v: string) => void; onCommit: () => void;
+  multiline?: boolean; placeholder?: string; hasError?: boolean; isChanged?: boolean;
 }) {
-  const baseClass = 'w-full text-sm text-gray-900 bg-transparent rounded-md px-2 py-1.5 focus:bg-white focus:outline-none transition-all';
-  const normalBorder = 'border border-transparent hover:border-gray-200 focus:border-blue-300 focus:ring-1 focus:ring-blue-200';
-  const errorBorder = 'border border-red-300 bg-red-50 focus:border-red-400 focus:ring-1 focus:ring-red-200 placeholder:text-red-300';
+  const [local, setLocal] = useState(value);
+  useEffect(() => { setLocal(value); }, [value]);
+  const handleChange = (v: string) => { setLocal(v); onChange(v); };
 
-  const className = `${baseClass} ${hasError ? errorBorder : normalBorder} ${multiline ? 'resize-y' : ''}`;
-
-  if (multiline) {
-    return (
-      <textarea
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder={placeholder}
-        rows={3}
-        className={className}
-      />
-    );
+  const baseClass = 'w-full text-sm text-gray-900 rounded-lg px-3 py-2 focus:outline-none transition-all';
+  let borderClass: string;
+  if (hasError) {
+    borderClass = 'border border-red-300 bg-red-50 focus:border-red-400 focus:ring-2 focus:ring-red-100 placeholder:text-red-300';
+  } else if (isChanged) {
+    borderClass = 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-2 focus:ring-amber-100 placeholder:text-gray-300';
+  } else {
+    borderClass = 'border border-transparent bg-gray-50 hover:border-gray-200 hover:bg-white focus:border-blue-300 focus:bg-white focus:ring-2 focus:ring-blue-100 placeholder:text-gray-300';
   }
+
   return (
-    <input
-      type="text"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      placeholder={placeholder}
-      className={`${className} placeholder:text-gray-300`}
-    />
+    <div>
+      {multiline ? (
+        <textarea
+          value={local} onChange={(e) => handleChange(e.target.value)} onBlur={onCommit}
+          placeholder={placeholder} rows={2}
+          className={`${baseClass} ${borderClass} resize-y leading-relaxed`}
+        />
+      ) : (
+        <input
+          type="text" value={local} onChange={(e) => handleChange(e.target.value)} onBlur={onCommit}
+          placeholder={placeholder} className={`${baseClass} ${borderClass}`}
+        />
+      )}
+      {isChanged && !hasError && (
+        <p className="text-xs text-amber-600 mt-1.5 ml-1 flex items-center gap-1">
+          <span className="w-1 h-1 rounded-full bg-amber-400 inline-block" />
+          Изменено · не сохранено
+        </p>
+      )}
+    </div>
+  );
+}
+
+function CollapsibleSection({ title, count, children }: { title: string; count: number; children: React.ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        className="w-full flex items-center justify-between px-6 py-4 hover:bg-gray-50 transition-colors"
+      >
+        <div className="flex items-center gap-3">
+          <span className="w-1 h-4 rounded-full bg-gray-300 flex-shrink-0" />
+          <span className="text-xs font-bold uppercase tracking-widest text-gray-400">{title}</span>
+          <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2.5 py-0.5">{count}</span>
+        </div>
+        <ChevronDown className={`h-4 w-4 text-gray-400 transition-transform duration-200 ${open ? 'rotate-180' : ''}`} />
+      </button>
+      {open && <div className="px-6 pb-6 border-t border-gray-100">{children}</div>}
+    </div>
   );
 }
 
 export function QuestionEditor() {
-  const { currentQuestion, updateQuestion, validationErrors } = useStore();
+  const { currentQuestion, savedQuestion, updateQuestion, commitHistory, validationErrors, savedFlash } = useStore();
 
   if (!currentQuestion) {
     return (
@@ -132,9 +167,11 @@ export function QuestionEditor() {
   }
 
   const q = currentQuestion;
+  const saved = savedQuestion;
 
   const updateApproval = (key: string, value: string) => {
     updateQuestion({ approval: { ...q.approval, [key]: value } });
+    commitHistory();
   };
 
   const updateCard = (key: string, value: string) => {
@@ -142,84 +179,47 @@ export function QuestionEditor() {
   };
 
   const updateControl = (idx: number, key: keyof ControlRow, value: string) => {
-    const controls = q.controls.map((c, i) => (i === idx ? { ...c, [key]: value } : c));
-    updateQuestion({ controls });
-  };
-
-  const addControl = () => {
-    updateQuestion({
-      controls: [...q.controls, { id: '', type: '', conditions: '', strictness: '' }],
-    });
-  };
-
-  const removeControl = (idx: number) => {
-    updateQuestion({ controls: q.controls.filter((_, i) => i !== idx) });
+    updateQuestion({ controls: q.controls.map((c, i) => (i === idx ? { ...c, [key]: value } : c)) });
   };
 
   const updateAnswer = (idx: number, key: keyof AnswerRow, value: string) => {
-    const answers = q.answers.map((a, i) => (i === idx ? { ...a, [key]: value } : a));
-    updateQuestion({ answers });
-  };
-
-  const addAnswer = () => {
-    updateQuestion({
-      answers: [
-        ...q.answers,
-        { number: String(q.answers.length + 1), type: '', headerText: '', hintText: '-', defaultValue: '-', code: '', nextId: '' },
-      ],
-    });
-  };
-
-  const removeAnswer = (idx: number) => {
-    updateQuestion({ answers: q.answers.filter((_, i) => i !== idx) });
+    updateQuestion({ answers: q.answers.map((a, i) => (i === idx ? { ...a, [key]: value } : a)) });
   };
 
   return (
-    <div className="flex-1 overflow-y-auto">
-      <div className="max-w-4xl mx-auto px-8 py-8 space-y-8">
+    <div className="flex-1 overflow-y-auto bg-[#F7F8FA]">
+      <div className="max-w-3xl mx-auto px-8 py-5 space-y-4">
 
-        {/* Title */}
-        <div>
-          <input
-            type="text"
-            value={q.title}
-            onChange={(e) => updateQuestion({ title: e.target.value })}
-            className="w-full text-2xl font-bold text-gray-900 bg-transparent border-0 focus:outline-none focus:ring-0 p-0 placeholder:text-gray-300"
-            placeholder="Заголовок вопроса"
-          />
-        </div>
-
-        {/* Approval Section */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <SectionTitle>Статус утверждения</SectionTitle>
-          <div className="space-y-0">
-            {(Object.keys(APPROVAL_LABELS) as Array<keyof typeof APPROVAL_LABELS>).map((key) => (
-              <FieldRow key={key} label={APPROVAL_LABELS[key]}>
-                <ApprovalToggle
-                  value={q.approval[key as keyof typeof q.approval] || 'Нет'}
-                  onChange={(v) => updateApproval(key, v)}
-                />
-              </FieldRow>
-            ))}
+        {/* Карточка вопроса */}
+        <div className={`bg-white rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
+          savedFlash ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <SectionTitle>Карточка вопроса</SectionTitle>
+            {savedFlash && (
+              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 mb-5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                Сохранено
+              </span>
+            )}
           </div>
-        </div>
-
-        {/* Card Section */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <SectionTitle>Карточка вопроса</SectionTitle>
-          <div className="space-y-0">
+          <div>
             {(Object.keys(CARD_LABELS) as Array<keyof typeof CARD_LABELS>).map((key) => {
               const isRequired = key in REQUIRED_CARD_FIELDS;
               const label = CARD_LABELS[key];
               const hasError = isRequired && validationErrors.includes(label);
+              const isChanged = !hasError && !savedFlash && saved !== null &&
+                (saved.card[key as keyof typeof saved.card] ?? '') !== (q.card[key as keyof typeof q.card] ?? '');
               return (
                 <FieldRow key={key} label={label} required={isRequired} hasError={hasError}>
                   <EditableField
                     value={q.card[key as keyof typeof q.card] || ''}
                     onChange={(v) => updateCard(key, v)}
+                    onCommit={commitHistory}
                     multiline={['fillType', 'questionText', 'helpText', 'precondition'].includes(key)}
                     placeholder={isRequired ? 'Обязательное поле' : '—'}
                     hasError={hasError}
+                    isChanged={isChanged}
                   />
                 </FieldRow>
               );
@@ -227,118 +227,95 @@ export function QuestionEditor() {
           </div>
         </div>
 
-        {/* Controls Table */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <SectionTitle>Контроли</SectionTitle>
-            <button
-              onClick={addControl}
-              className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Добавить контроль
-            </button>
-          </div>
-          {q.controls.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">Нет контролей</p>
-          ) : (
-            <div className="overflow-x-auto">
+        {/* Статус утверждения */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm">
+          <SectionTitle>Статус утверждения</SectionTitle>
+          <ApprovalChips approval={q.approval} savedApproval={saved?.approval} onChange={updateApproval} />
+        </div>
+
+        {/* Контроли */}
+        {q.controls.length > 0 && (
+          <CollapsibleSection title="Контроли" count={q.controls.length}>
+            <div className="overflow-x-auto mt-4">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['ID контроля', 'Тип контроля', 'Условия контроля', 'Строгость', ''].map((h) => (
-                      <th key={h} className="text-left py-2 px-2 text-xs font-medium text-gray-400 first:pl-0">
-                        {h}
-                      </th>
+                    {['ID контроля', 'Тип', 'Условия', 'Строгость'].map((h) => (
+                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {q.controls.map((ctrl, idx) => (
-                    <tr key={idx} className="border-b border-gray-50 group">
-                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => (
-                        <td key={field} className="py-1.5 px-2 first:pl-0">
-                          <input
-                            type="text"
-                            value={ctrl[field]}
-                            onChange={(e) => updateControl(idx, field, e.target.value)}
-                            placeholder="—"
-                            className="w-full text-sm text-gray-900 bg-transparent border border-transparent rounded px-1.5 py-1 hover:border-gray-200 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-200 transition-all placeholder:text-gray-300"
-                          />
-                        </td>
-                      ))}
-                      <td className="py-1.5 px-2 w-8">
-                        <button
-                          onClick={() => removeControl(idx)}
-                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
+                    <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => {
+                        const isChanged = !savedFlash && saved !== null &&
+                          (saved.controls[idx]?.[field] ?? '') !== ctrl[field];
+                        return (
+                          <td key={field} className="py-2 px-3 first:pl-0">
+                            <input
+                              type="text" value={ctrl[field]}
+                              onChange={(e) => updateControl(idx, field, e.target.value)}
+                              onBlur={commitHistory} placeholder="—"
+                              className={`w-full text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
+                                isChanged
+                                  ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                                  : 'border border-transparent bg-transparent hover:bg-gray-100 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
+                              }`}
+                            />
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </CollapsibleSection>
+        )}
 
-        {/* Answers Table */}
-        <div className="bg-white rounded-xl border border-gray-200 p-5">
-          <div className="flex items-center justify-between mb-3">
-            <SectionTitle>Варианты ответов</SectionTitle>
-            <button
-              onClick={addAnswer}
-              className="flex items-center gap-1.5 text-xs text-blue-600 hover:text-blue-700 transition-colors"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              Добавить ответ
-            </button>
-          </div>
-          {q.answers.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-4">Нет вариантов ответов</p>
-          ) : (
-            <div className="overflow-x-auto">
+        {/* Варианты ответов */}
+        {q.answers.length > 0 && (
+          <CollapsibleSection title="Варианты ответов" count={q.answers.length}>
+            <div className="overflow-x-auto mt-4">
               <table className="w-full text-sm border-collapse">
                 <thead>
                   <tr className="border-b border-gray-100">
-                    {['№', 'Тип ответа', 'Заголовок', 'Подсказка', 'Предуст. знач.', 'Код', 'Переход на ID', ''].map((h) => (
-                      <th key={h} className="text-left py-2 px-2 text-xs font-medium text-gray-400 first:pl-0">
-                        {h}
-                      </th>
+                    {['№', 'Тип', 'Заголовок', 'Подсказка', 'Предуст.', 'Код', 'Переход'].map((h) => (
+                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
                   {q.answers.map((ans, idx) => (
-                    <tr key={idx} className="border-b border-gray-50 group">
-                      {(['number', 'type', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => (
-                        <td key={field} className="py-1.5 px-2 first:pl-0">
-                          <input
-                            type="text"
-                            value={ans[field]}
-                            onChange={(e) => updateAnswer(idx, field, e.target.value)}
-                            placeholder="—"
-                            className="w-full min-w-[60px] text-sm text-gray-900 bg-transparent border border-transparent rounded px-1.5 py-1 hover:border-gray-200 focus:border-blue-300 focus:bg-white focus:outline-none focus:ring-1 focus:ring-blue-200 transition-all placeholder:text-gray-300"
-                          />
-                        </td>
-                      ))}
-                      <td className="py-1.5 px-2 w-8">
-                        <button
-                          onClick={() => removeAnswer(idx)}
-                          className="opacity-0 group-hover:opacity-100 text-gray-300 hover:text-red-400 transition-all"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" />
-                        </button>
-                      </td>
+                    <tr key={idx} className="border-b border-gray-50 hover:bg-gray-50 transition-colors">
+                      {(['number', 'type', 'headerText', 'hintText', 'defaultValue', 'code', 'nextId'] as const).map((field) => {
+                        const isChanged = !savedFlash && saved !== null &&
+                          (saved.answers[idx]?.[field] ?? '') !== ans[field];
+                        return (
+                          <td key={field} className="py-2 px-3 first:pl-0">
+                            <input
+                              type="text" value={ans[field]}
+                              onChange={(e) => updateAnswer(idx, field, e.target.value)}
+                              onBlur={commitHistory} placeholder="—"
+                              className={`w-full min-w-[56px] text-sm text-gray-900 rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-2 transition-all placeholder:text-gray-300 ${
+                                isChanged
+                                  ? 'border border-amber-300 bg-amber-50 focus:border-amber-400 focus:ring-amber-100'
+                                  : 'border border-transparent bg-transparent hover:bg-gray-100 focus:border-blue-300 focus:bg-white focus:ring-blue-100'
+                              }`}
+                            />
+                          </td>
+                        );
+                      })}
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
-          )}
-        </div>
+          </CollapsibleSection>
+        )}
 
+        <div className="h-4" />
       </div>
     </div>
   );
