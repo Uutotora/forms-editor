@@ -303,16 +303,20 @@ export function QuestionEditor() {
                     <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide mr-1">№ {ans.number || idx + 1}</span>
                       {[
-                        { label: 'Аббревиатура', value: ans.abbreviation },
-                        { label: 'Тип ответа', value: ans.type },
-                        { label: 'Тип варианта ответа', value: ans.variantType },
-                        { label: 'Предустановленное значение', value: ans.defaultValue },
-                        { label: 'Код ответа', value: ans.code },
-                        { label: 'Переход на id', value: ans.nextId },
-                      ].map(({ label, value }) => (
-                        <span key={label} className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white border border-gray-200 rounded-full px-2.5 py-0.5">
-                          <span className="text-gray-400">{label}:</span>
-                          <span className="text-gray-700 font-medium">{value || '—'}</span>
+                        { label: 'Аббревиатура', value: ans.abbreviation, highlight: false },
+                        { label: 'Тип ответа', value: ans.type, highlight: true },
+                        { label: 'Тип варианта ответа', value: ans.variantType, highlight: true },
+                        { label: 'Предустановленное значение', value: ans.defaultValue, highlight: false },
+                        { label: 'Код ответа', value: ans.code, highlight: false },
+                        { label: 'Переход на id', value: ans.nextId, highlight: true },
+                      ].map(({ label, value, highlight }) => (
+                        <span key={label} className={`inline-flex items-center gap-1 text-xs rounded-full px-2.5 py-0.5 ${
+                          highlight
+                            ? 'bg-blue-50 border border-blue-300 text-blue-700'
+                            : 'bg-white border border-gray-200 text-gray-500'
+                        }`}>
+                          <span className={highlight ? 'text-blue-400' : 'text-gray-400'}>{label}:</span>
+                          <span className={`font-medium ${highlight ? 'text-blue-800' : 'text-gray-700'}`}>{value || '—'}</span>
                         </span>
                       ))}
                     </div>
