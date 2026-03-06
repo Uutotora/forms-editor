@@ -1,0 +1,19 @@
+[Unit]
+Description=Forms Editor (Next.js)
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory={{ app_dir }}/current
+Environment=NODE_ENV=production
+Environment=PORT={{ app_port }}
+Environment=HOSTNAME=127.0.0.1
+EnvironmentFile={{ app_dir }}/current/.env.production
+ExecStart=/usr/bin/npm run start -- -p {{ app_port }} -H 127.0.0.1
+Restart=always
+RestartSec=5
+User=root
+Group=root
+
+[Install]
+WantedBy=multi-user.target
