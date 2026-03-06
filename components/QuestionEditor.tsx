@@ -256,42 +256,27 @@ export function QuestionEditor() {
           </div>
         </div>
 
-        {/* Контроли */}
-        <CollapsibleSection title="Контроли" count={q.controls.length} flash={savedFlash.controls}>
-          {q.controls.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-400 italic">Нет данных</p>
-          ) : (
-            <div className="overflow-x-auto mt-4">
-              <table className="w-full text-sm border-collapse">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    {['ID контроля', 'Тип контроля', 'Условия контроля', 'Строгость'].map((h) => (
-                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {q.controls.map((ctrl, idx) => (
-                    <tr key={idx} className="border-b border-gray-50">
-                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => (
-                        <td key={field} className="py-2.5 px-3 first:pl-0 text-sm text-gray-600">
-                          {ctrl[field] || <span className="text-gray-300">—</span>}
-                        </td>
-                      ))}
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </CollapsibleSection>
-
         {/* Варианты ответов */}
-        <CollapsibleSection title="Варианты ответов" count={q.answers.length} flash={savedFlash.answers}>
+        <div className={`bg-white rounded-2xl border p-5 shadow-sm transition-all duration-500 ${
+          savedFlash.answers ? 'border-emerald-400 shadow-[0_0_0_4px_rgba(52,211,153,0.12)]' : 'border-gray-200'
+        }`}>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3 mb-3">
+              <span className="w-1 h-4 rounded-full bg-blue-500 flex-shrink-0" />
+              <h2 className="text-xs font-bold uppercase tracking-widest text-gray-400">Варианты ответов</h2>
+              <span className="text-xs font-medium text-gray-400 bg-gray-100 rounded-full px-2.5 py-0.5">{q.answers.length}</span>
+            </div>
+            {savedFlash.answers && (
+              <span className="text-xs text-emerald-600 font-semibold flex items-center gap-1.5 mb-5">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
+                Сохранено
+              </span>
+            )}
+          </div>
           {q.answers.length === 0 ? (
-            <p className="mt-4 text-sm text-gray-400 italic">Нет данных</p>
+            <p className="text-sm text-gray-400 italic">Нет данных</p>
           ) : (
-            <div className="mt-4 space-y-3">
+            <div className="space-y-3">
               {q.answers.map((ans, idx) => {
                 const headerChanged = !savedFlash.answers && saved !== null &&
                   (saved.answers[idx]?.headerText ?? '') !== ans.headerText;
@@ -371,7 +356,37 @@ export function QuestionEditor() {
               })}
             </div>
           )}
-          </CollapsibleSection>
+        </div>
+
+        {/* Контроли */}
+        <CollapsibleSection title="Контроли" count={q.controls.length} flash={savedFlash.controls}>
+          {q.controls.length === 0 ? (
+            <p className="mt-4 text-sm text-gray-400 italic">Нет данных</p>
+          ) : (
+            <div className="overflow-x-auto mt-4">
+              <table className="w-full text-sm border-collapse">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    {['ID контроля', 'Тип контроля', 'Условия контроля', 'Строгость'].map((h) => (
+                      <th key={h} className="text-left py-2.5 px-3 text-xs font-semibold text-gray-400 uppercase tracking-wide first:pl-0">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {q.controls.map((ctrl, idx) => (
+                    <tr key={idx} className="border-b border-gray-50">
+                      {(['id', 'type', 'conditions', 'strictness'] as const).map((field) => (
+                        <td key={field} className="py-2.5 px-3 first:pl-0 text-sm text-gray-600">
+                          {ctrl[field] || <span className="text-gray-300">—</span>}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CollapsibleSection>
 
         <div className="h-4" />
       </div>
