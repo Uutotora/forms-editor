@@ -1,4 +1,4 @@
-service-account.json
+service-account*.json
 *:Zone.Identifier
 .DS_Store
 Thumbs.db
